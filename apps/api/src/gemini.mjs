@@ -140,7 +140,7 @@ ${TONE_INSTRUCTIONS[request.tone]}`;
       body = await response.json().catch(() => ({}));
       if (response.ok) break;
 
-      const retryable = response.status === 429 || response.status === 503;
+      const retryable = response.status === 429 || response.status >= 500;
       if (retryable && attempt < 2) {
         await delay(retryBaseDelayMs * 3 ** attempt);
         continue;
@@ -165,8 +165,8 @@ ${TONE_INSTRUCTIONS[request.tone]}`;
                   code: "provider_model_not_found"
                 }
               : {
-                  message: "Gemini 번역 요청에 실패했습니다.",
-                  code: "provider_error"
+                  message: `Gemini 번역 요청에 실패했습니다 (HTTP ${response.status}).`,
+                  code: `provider_http_${response.status}`
                 };
 
       throw new TranslationError(

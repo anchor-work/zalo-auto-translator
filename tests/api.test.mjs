@@ -57,14 +57,14 @@ describe("Gemini translation backend", () => {
   });
 
   it("uses the fallback model only after retryable primary failures", async () => {
-    const busy = () =>
+    const busy = (status = 503) =>
       new Response(
-        JSON.stringify({ error: { code: 503, status: "UNAVAILABLE" } }),
-        { status: 503, headers: { "Content-Type": "application/json" } }
+        JSON.stringify({ error: { code: status, status: "UNAVAILABLE" } }),
+        { status, headers: { "Content-Type": "application/json" } }
       );
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(busy())
+      .mockResolvedValueOnce(busy(500))
       .mockResolvedValueOnce(busy())
       .mockResolvedValueOnce(
         new Response(
