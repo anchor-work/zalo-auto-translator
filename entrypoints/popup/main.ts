@@ -1,5 +1,8 @@
 import { browser } from "wxt/browser";
-import { validateApiBaseUrl } from "../../src/settings";
+import {
+  PRODUCTION_API_BASE_URL,
+  validateApiBaseUrl
+} from "../../src/settings";
 import type {
   BackgroundMessage,
   BackgroundResponse,
@@ -22,11 +25,18 @@ const tone = element<HTMLSelectElement>("tone");
 const mode = element<HTMLSelectElement>("mode");
 const apiUrl = element<HTMLInputElement>("api-url");
 const apiUrlLabel = element<HTMLLabelElement>("api-url-label");
+const modeLabel = element<HTMLLabelElement>("mode-label");
+const developerHint = element<HTMLDivElement>("developer-hint");
+const serviceHint = element<HTMLDivElement>("service-hint");
 const save = element<HTMLButtonElement>("save");
 const status = element<HTMLParagraphElement>("status");
+const isDevelopment = import.meta.env.DEV;
 
 function updateModeVisibility(): void {
-  apiUrlLabel.hidden = mode.value !== "local-api";
+  modeLabel.hidden = !isDevelopment;
+  developerHint.hidden = !isDevelopment;
+  apiUrlLabel.hidden = !isDevelopment || mode.value !== "local-api";
+  serviceHint.hidden = isDevelopment;
 }
 
 async function load(): Promise<void> {
@@ -63,14 +73,16 @@ save.addEventListener("click", async () => {
 
   try {
     const settings: ExtensionSettings = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       enabled: enabled.checked,
       tone: tone.value as TranslationTone,
-      mode: mode.value as TranslationMode,
+      mode: isDevelopment ? (mode.value as TranslationMode) : "local-api",
       localApiBaseUrl:
-        mode.value === "local-api"
+        isDevelopment && mode.value === "local-api"
           ? validateApiBaseUrl(apiUrl.value)
-          : apiUrl.value || "http://localhost:8787"
+          : isDevelopment
+            ? apiUrl.value || "http://localhost:8787"
+            : PRODUCTION_API_BASE_URL
     };
 
     const response = (await browser.runtime.sendMessage({

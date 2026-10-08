@@ -69,6 +69,11 @@ select {
   padding: 11px;
 }
 
+.service-hint {
+  background: #eef7ff;
+  color: #31577d;
+}
+
 dl {
   display: grid;
   gap: 8px;

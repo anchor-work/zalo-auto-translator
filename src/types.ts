@@ -8,7 +8,7 @@ export type TranslationTone =
 export type TranslationMode = "demo" | "local-api";
 
 export interface ExtensionSettings {
-  schemaVersion: 2;
+  schemaVersion: 3;
   enabled: boolean;
   tone: TranslationTone;
   mode: TranslationMode;

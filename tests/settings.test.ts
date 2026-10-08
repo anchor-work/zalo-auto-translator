@@ -8,18 +8,21 @@ describe("translation API URL validation", () => {
     );
   });
 
-  it("accepts HTTPS Cloud Run URLs", () => {
+  it("accepts the production Cloud Run URL", () => {
     expect(
       validateApiBaseUrl(
-        "https://zalo-translator-api-example.asia-northeast3.run.app/"
+        "https://zalo-translator-api-s6bip5vp3a-du.a.run.app/"
       )
-    ).toBe("https://zalo-translator-api-example.asia-northeast3.run.app");
+    ).toBe("https://zalo-translator-api-s6bip5vp3a-du.a.run.app");
   });
 
-  it("rejects insecure public and credential-bearing URLs", () => {
-    expect(() => validateApiBaseUrl("http://example.com")).toThrow("Cloud Run");
+  it("rejects unknown, insecure, and credential-bearing URLs", () => {
+    expect(() => validateApiBaseUrl("http://example.com")).toThrow("공식 번역 서버");
+    expect(() =>
+      validateApiBaseUrl("https://another-service.run.app")
+    ).toThrow("공식 번역 서버");
     expect(() =>
       validateApiBaseUrl("https://user:password@example.run.app")
-    ).toThrow("Cloud Run");
+    ).toThrow("공식 번역 서버");
   });
 });

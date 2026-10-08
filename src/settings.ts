@@ -2,19 +2,21 @@ import { browser } from "wxt/browser";
 import type { ExtensionSettings } from "./types";
 
 const SETTINGS_KEY = "settings";
+export const PRODUCTION_API_BASE_URL =
+  "https://zalo-translator-api-s6bip5vp3a-du.a.run.app";
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   enabled: true,
   tone: "natural",
   mode: "local-api",
-  localApiBaseUrl: "http://localhost:8787"
+  localApiBaseUrl: PRODUCTION_API_BASE_URL
 };
 
 export async function getSettings(): Promise<ExtensionSettings> {
   const stored = await browser.storage.local.get(SETTINGS_KEY);
   const value = stored[SETTINGS_KEY] as Partial<ExtensionSettings> | undefined;
-  if (value && value.schemaVersion !== 2) {
+  if (value && value.schemaVersion !== 3) {
     return {
       ...DEFAULT_SETTINGS,
       enabled: value.enabled ?? DEFAULT_SETTINGS.enabled,
@@ -38,11 +40,11 @@ export function validateApiBaseUrl(value: string): string {
 
   const isLocal =
     url.protocol === "http:" && new Set(["localhost", "127.0.0.1"]).has(url.hostname);
-  const isCloudRun = url.protocol === "https:" && url.hostname.endsWith(".run.app");
+  const isProductionApi = url.origin === PRODUCTION_API_BASE_URL;
 
-  if ((!isLocal && !isCloudRun) || url.username || url.password) {
+  if ((!isLocal && !isProductionApi) || url.username || url.password) {
     throw new Error(
-      "번역 API 주소는 로컬 개발 주소 또는 HTTPS Cloud Run 주소를 사용해야 합니다."
+      "번역 API 주소는 로컬 개발 주소 또는 공식 번역 서버 주소를 사용해야 합니다."
     );
   }
 

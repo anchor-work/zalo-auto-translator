@@ -27,7 +27,7 @@
         </select>
       </label>
 
-      <label>
+      <label id="mode-label" hidden>
         번역 모드
         <select id="mode">
           <option value="demo">데모 번역기</option>
@@ -35,13 +35,17 @@
         </select>
       </label>
 
-      <label id="api-url-label">
+      <label id="api-url-label" hidden>
         번역 API 주소
         <input id="api-url" type="url" spellcheck="false" />
       </label>
 
-      <div class="hint">
+      <div id="developer-hint" class="hint" hidden>
         데모 예시: “안녕하세요”, “지금 어디에 있어요?”, “오늘 시간 괜찮아요?”
+      </div>
+
+      <div id="service-hint" class="hint service-hint">
+        Gemini 번역 서버에 안전하게 연결됩니다. API 키는 확장프로그램에 저장되지 않습니다.
       </div>
 
       <section class="usage" aria-labelledby="usage-title">
