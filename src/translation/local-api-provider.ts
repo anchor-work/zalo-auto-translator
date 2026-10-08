@@ -53,7 +53,7 @@ export async function translateWithLocalApi(
     }
     if (error instanceof TypeError) {
       throw new Error(
-        "번역 서버에 연결할 수 없습니다. 터미널에서 npm run api:start가 실행 중인지 확인해 주세요."
+        "번역 서버에 연결할 수 없습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요."
       );
     }
     throw error;

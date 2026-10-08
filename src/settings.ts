@@ -6,9 +6,12 @@ export const PRODUCTION_API_BASE_URL =
   "https://zalo-translator-api-s6bip5vp3a-du.a.run.app";
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   enabled: true,
   tone: "natural",
+  vietnameseAddress: "neutral",
+  outgoingTargetLanguage: "vi",
+  autoTranslateIncoming: false,
   mode: "local-api",
   localApiBaseUrl: PRODUCTION_API_BASE_URL
 };
@@ -16,7 +19,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 export async function getSettings(): Promise<ExtensionSettings> {
   const stored = await browser.storage.local.get(SETTINGS_KEY);
   const value = stored[SETTINGS_KEY] as Partial<ExtensionSettings> | undefined;
-  if (value && value.schemaVersion !== 3) {
+  if (value && value.schemaVersion !== 4) {
     return {
       ...DEFAULT_SETTINGS,
       enabled: value.enabled ?? DEFAULT_SETTINGS.enabled,

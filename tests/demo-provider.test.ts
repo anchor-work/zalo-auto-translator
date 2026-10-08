@@ -8,6 +8,7 @@ describe("demo translation provider", () => {
       sourceLanguage: "ko",
       targetLanguage: "vi",
       tone: "natural",
+      vietnameseAddress: "neutral",
       requestId: "test"
     });
 
@@ -22,6 +23,7 @@ describe("demo translation provider", () => {
         sourceLanguage: "ko",
         targetLanguage: "vi",
         tone: "natural",
+        vietnameseAddress: "neutral",
         requestId: "test"
       })
     ).rejects.toThrow("예시 문장만 지원");

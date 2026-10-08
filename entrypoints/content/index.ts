@@ -5,9 +5,14 @@ import type {
   BackgroundResponse,
   ExtensionSettings,
   TranslationResult,
-  TranslationTone
+  TranslationTone,
+  VietnameseAddress
 } from "../../src/types";
 import { findComposerFromFocus, sendComposer } from "../../src/zalo/dom-adapter";
+import {
+  findIncomingMessages,
+  type IncomingMessageCandidate
+} from "../../src/zalo/incoming-adapter";
 import contentStyle from "./style.css?inline";
 
 const ROOT_ID = "zalo-auto-translator-root";
@@ -29,8 +34,12 @@ export default defineContentScript({
     let activeComposer: HTMLElement | null = null;
     let translatedSource = "";
     let translatedTone: TranslationTone | null = null;
+    let translatedAddress: VietnameseAddress | null = null;
+    let translatedTarget: "vi" | "en" | null = null;
     let requestSequence = 0;
     let operation: ComposeOperation = "idle";
+    let currentSettings: ExtensionSettings | null = null;
+    const incomingCache = new Map<string, string>();
 
     const host = document.createElement("div");
     host.id = ROOT_ID;
@@ -48,7 +57,7 @@ export default defineContentScript({
     const header = document.createElement("div");
     header.className = "zat-header";
     const title = document.createElement("strong");
-    title.textContent = "한→베 번역";
+    title.textContent = "메시지 번역";
     const collapseButton = createButton("−", "zat-icon-button");
     collapseButton.setAttribute("aria-label", "번역기 접기");
     header.append(title, collapseButton);
@@ -74,8 +83,45 @@ export default defineContentScript({
     keyboardHint.className = "zat-hint";
     sourceLabel.append(sourceText, keyboardHint);
 
+    const targetLabel = document.createElement("label");
+    targetLabel.textContent = "보내는 언어";
+    const targetSelect = document.createElement("select");
+    const targetOptions: Array<["vi" | "en", string]> = [
+      ["vi", "베트남어"],
+      ["en", "영어"]
+    ];
+    targetOptions.forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      targetSelect.append(option);
+    });
+    targetLabel.append(targetSelect);
+
+    const addressLabel = document.createElement("label");
+    addressLabel.textContent = "베트남어 호칭 관계";
+    const addressSelect = document.createElement("select");
+    const addresses: Array<[VietnameseAddress, string]> = [
+      ["neutral", "관계 모름 · tôi / bạn"],
+      ["older_male", "상대가 약간 연상 남성 · em / anh"],
+      ["older_female", "상대가 약간 연상 여성 · em / chị"],
+      ["younger_from_male", "내가 연상 남성 · anh / em"],
+      ["younger_from_female", "내가 연상 여성 · chị / em"],
+      ["same_age", "동갑 또는 친구 · mình / bạn"],
+      ["much_older_male", "상대가 많이 연상 남성 · cháu / chú"],
+      ["much_older_female", "상대가 많이 연상 여성 · cháu / cô"],
+      ["customer", "고객 · tôi / anh·chị·quý khách"]
+    ];
+    addresses.forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      addressSelect.append(option);
+    });
+    addressLabel.append(addressSelect);
+
     const toneLabel = document.createElement("label");
-    toneLabel.textContent = "상대방과 말투";
+    toneLabel.textContent = "말투";
     const toneSelect = document.createElement("select");
     const tones: Array<[TranslationTone, string]> = [
       ["natural", "자연스럽게"],
@@ -92,6 +138,17 @@ export default defineContentScript({
       toneSelect.append(option);
     });
     toneLabel.append(toneSelect);
+
+    const incomingToggleLabel = document.createElement("label");
+    incomingToggleLabel.className = "zat-toggle zat-incoming-toggle";
+    const incomingToggle = document.createElement("input");
+    incomingToggle.type = "checkbox";
+    const incomingToggleText = document.createElement("span");
+    incomingToggleText.textContent = "새로 받은 메시지 자동 번역";
+    incomingToggleLabel.append(incomingToggle, incomingToggleText);
+    const incomingHint = document.createElement("small");
+    incomingHint.className = "zat-hint";
+    incomingHint.textContent = "받은 메시지의 번역 버튼을 누르거나, 새 메시지만 자동으로 한국어 번역합니다.";
 
     const sourceActions = document.createElement("div");
     sourceActions.className = "zat-source-actions";
@@ -115,7 +172,17 @@ export default defineContentScript({
     previewActions.append(cancelButton, sendButton);
     preview.append(previewLabel, previewActions);
 
-    body.append(status, sourceLabel, toneLabel, sourceActions, preview);
+    body.append(
+      status,
+      sourceLabel,
+      targetLabel,
+      addressLabel,
+      toneLabel,
+      sourceActions,
+      preview,
+      incomingToggleLabel,
+      incomingHint
+    );
     panel.append(header, body);
     shadow.append(panel);
 
@@ -127,7 +194,12 @@ export default defineContentScript({
     const previewIsCurrent = () =>
       Boolean(previewText.value.trim()) &&
       translatedSource === sourceText.value.trim() &&
-      translatedTone === toneSelect.value;
+      translatedTone === toneSelect.value &&
+      translatedAddress === addressSelect.value &&
+      translatedTarget === targetSelect.value;
+
+    const targetLanguageName = () =>
+      targetSelect.value === "en" ? "영어" : "베트남어";
 
     const refreshControls = () => {
       const ready = previewIsCurrent();
@@ -136,6 +208,8 @@ export default defineContentScript({
 
       sourceText.disabled = sending;
       toneSelect.disabled = operation !== "idle";
+      addressSelect.disabled = operation !== "idle";
+      targetSelect.disabled = operation !== "idle";
       previewText.disabled = sending;
       translateButton.disabled = operation !== "idle" || !hasSource;
       sendButton.disabled = operation !== "idle" || !ready;
@@ -143,7 +217,12 @@ export default defineContentScript({
       clearAllButton.disabled = sending || (!hasSource && !previewText.value.trim());
 
       translateButton.textContent =
-        operation === "translating" ? "번역 중…" : ready ? "다시 번역" : "베트남어로 번역";
+        operation === "translating"
+          ? "번역 중…"
+          : ready
+            ? "다시 번역"
+            : `${targetLanguageName()}로 번역`;
+      addressLabel.hidden = targetSelect.value !== "vi";
       sendButton.textContent = operation === "sending" ? "전송 중…" : "Zalo로 전송";
       keyboardHint.textContent =
         operation === "translating"
@@ -159,6 +238,8 @@ export default defineContentScript({
       previewText.value = "";
       translatedSource = "";
       translatedTone = null;
+      translatedAddress = null;
+      translatedTarget = null;
       preview.classList.add("zat-hidden");
       preview.classList.remove("zat-stale");
     };
@@ -198,9 +279,9 @@ export default defineContentScript({
         setStatus("Enter를 누르면 번역문을 Zalo로 전송합니다.", "success");
       } else if (!preview.classList.contains("zat-hidden")) {
         preview.classList.add("zat-stale");
-        setStatus("원문 또는 말투가 변경되었습니다. Enter를 눌러 다시 번역하세요.");
+        setStatus("원문, 언어, 호칭 또는 말투가 변경되었습니다. 다시 번역합니다.");
       } else {
-        setStatus("Enter를 누르면 베트남어로 번역합니다.");
+        setStatus(`Enter를 누르면 ${targetLanguageName()}로 번역합니다.`);
       }
       refreshControls();
     };
@@ -229,6 +310,8 @@ export default defineContentScript({
       if (operation !== "idle") return;
       const text = sourceText.value.trim();
       const tone = toneSelect.value as TranslationTone;
+      const vietnameseAddress = addressSelect.value as VietnameseAddress;
+      const targetLanguage = targetSelect.value as "vi" | "en";
       if (!text) {
         setStatus("위 입력란에 번역할 한국어를 입력해 주세요.", "error");
         sourceText.focus();
@@ -238,11 +321,17 @@ export default defineContentScript({
       const sequence = ++requestSequence;
       operation = "translating";
       refreshControls();
-      setStatus("베트남어 번역을 준비하고 있습니다.");
+      setStatus(`${targetLanguageName()} 번역을 준비하고 있습니다.`);
 
       const message: BackgroundMessage = {
         type: "translate",
-        payload: { text, sourceLanguage: "ko", targetLanguage: "vi", tone }
+        payload: {
+          text,
+          sourceLanguage: "ko",
+          targetLanguage,
+          tone,
+          vietnameseAddress
+        }
       };
 
       try {
@@ -253,7 +342,9 @@ export default defineContentScript({
         if (
           sequence !== requestSequence ||
           sourceText.value.trim() !== text ||
-          toneSelect.value !== tone
+          toneSelect.value !== tone ||
+          addressSelect.value !== vietnameseAddress ||
+          targetSelect.value !== targetLanguage
         ) {
           return;
         }
@@ -261,6 +352,8 @@ export default defineContentScript({
         previewText.value = response.data.translatedText;
         translatedSource = text;
         translatedTone = tone;
+        translatedAddress = vietnameseAddress;
+        translatedTarget = targetLanguage;
         preview.classList.remove("zat-hidden", "zat-stale");
         operation = "idle";
         refreshControls();
@@ -283,7 +376,7 @@ export default defineContentScript({
       const composer = getActiveComposer();
       if (!composer) return;
       if (!translated.trim()) {
-        setStatus("전송할 베트남어 번역문을 확인해 주세요.", "error");
+        setStatus(`전송할 ${targetLanguageName()} 번역문을 확인해 주세요.`, "error");
         return;
       }
 
@@ -318,6 +411,129 @@ export default defineContentScript({
       }
     };
 
+    const persistPanelSettings = async (
+      patch: Partial<Pick<
+        ExtensionSettings,
+        "tone" | "vietnameseAddress" | "outgoingTargetLanguage" | "autoTranslateIncoming"
+      >>
+    ): Promise<void> => {
+      if (!currentSettings) return;
+      currentSettings = { ...currentSettings, ...patch };
+      const response = (await browser.runtime.sendMessage({
+        type: "save-settings",
+        payload: currentSettings
+      } satisfies BackgroundMessage)) as BackgroundResponse<ExtensionSettings>;
+      if (!response.ok) throw new Error(response.error);
+    };
+
+    const translateIncomingMessage = async (
+      candidate: IncomingMessageCandidate,
+      button: HTMLButtonElement,
+      result: HTMLDivElement
+    ): Promise<void> => {
+      if (button.disabled) return;
+      const cached = incomingCache.get(candidate.text);
+      if (cached) {
+        delete result.dataset.state;
+        result.textContent = cached;
+        result.hidden = false;
+        button.textContent = "다시 번역";
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = "번역 중…";
+      result.hidden = true;
+      const message: BackgroundMessage = {
+        type: "translate",
+        payload: {
+          text: candidate.text,
+          sourceLanguage: "auto",
+          targetLanguage: "ko",
+          tone: "natural",
+          vietnameseAddress: "neutral"
+        }
+      };
+
+      try {
+        const response = (await browser.runtime.sendMessage(
+          message
+        )) as BackgroundResponse<TranslationResult>;
+        if (!response.ok) throw new Error(response.error);
+        incomingCache.set(candidate.text, response.data.translatedText);
+        delete result.dataset.state;
+        result.textContent = response.data.translatedText;
+        result.hidden = false;
+        button.textContent = "다시 번역";
+      } catch (error) {
+        result.textContent =
+          error instanceof Error ? error.message : "받은 메시지 번역에 실패했습니다.";
+        result.dataset.state = "error";
+        result.hidden = false;
+        button.textContent = "재시도";
+      } finally {
+        button.disabled = false;
+      }
+    };
+
+    const decorateIncomingMessages = (root: ParentNode, translateAutomatically: boolean) => {
+      findIncomingMessages(root).forEach((candidate) => {
+        candidate.container.dataset.zatIncomingDecorated = "true";
+        const controls = document.createElement("div");
+        controls.className = "zat-incoming-tools";
+        const button = createButton("한국어 번역", "zat-incoming-translate");
+        const result = document.createElement("div");
+        result.className = "zat-incoming-result";
+        result.hidden = true;
+        controls.append(button, result);
+        candidate.textElement.insertAdjacentElement("afterend", controls);
+        button.addEventListener("click", () => {
+          incomingCache.delete(candidate.text);
+          void translateIncomingMessage(candidate, button, result);
+        });
+        if (translateAutomatically) {
+          void translateIncomingMessage(candidate, button, result);
+        }
+      });
+    };
+
+    const incomingStyle = document.createElement("style");
+    incomingStyle.id = "zalo-auto-translator-incoming-style";
+    incomingStyle.textContent = `
+      .zat-incoming-tools { clear: both; display: grid; gap: 5px; margin: 4px 0 7px; max-width: min(420px, 75vw); }
+      .zat-incoming-translate { background: transparent; border: 0; color: #2867e8; cursor: pointer; font: 600 11px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; justify-self: start; padding: 2px 4px; }
+      .zat-incoming-translate:disabled { cursor: wait; opacity: .6; }
+      .zat-incoming-result { background: #eef6ff; border-left: 3px solid #2867e8; border-radius: 6px; color: #172033; font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 7px 9px; white-space: pre-wrap; }
+      .zat-incoming-result[data-state="error"] { background: #fff1f1; border-left-color: #c52a2a; color: #a12121; }
+    `;
+    document.head.append(incomingStyle);
+
+    let incomingScanTimer: ReturnType<typeof setTimeout> | undefined;
+    const incomingObserver = new MutationObserver((mutations) => {
+      if (incomingScanTimer) clearTimeout(incomingScanTimer);
+      const addedRoots = Array.from(
+        new Set(
+          mutations.flatMap((mutation) =>
+            Array.from(mutation.addedNodes)
+              .map((node) =>
+                node instanceof HTMLElement
+                  ? node
+                  : node.parentElement instanceof HTMLElement
+                    ? node.parentElement
+                    : null
+              )
+              .filter((node): node is HTMLElement => node !== null)
+          )
+        )
+      );
+      if (!addedRoots.length) return;
+      incomingScanTimer = setTimeout(() => {
+        addedRoots.forEach((root) => decorateIncomingMessages(root, incomingToggle.checked));
+      }, 250);
+    });
+    incomingObserver.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => decorateIncomingMessages(document, false), 800);
+
     const handleEnter = () => {
       const action = getEnterAction({
         operation,
@@ -344,7 +560,29 @@ export default defineContentScript({
     sendButton.addEventListener("click", () => void sendTranslation(previewText.value));
 
     sourceText.addEventListener("input", invalidatePreview);
-    toneSelect.addEventListener("change", invalidatePreview);
+    const handleTranslationOptionChange = () => {
+      invalidatePreview();
+      void persistPanelSettings({
+        tone: toneSelect.value as TranslationTone,
+        vietnameseAddress: addressSelect.value as VietnameseAddress,
+        outgoingTargetLanguage: targetSelect.value as "vi" | "en"
+      }).catch(() => undefined);
+      if (sourceText.value.trim()) void requestTranslation();
+    };
+    toneSelect.addEventListener("change", handleTranslationOptionChange);
+    addressSelect.addEventListener("change", handleTranslationOptionChange);
+    targetSelect.addEventListener("change", handleTranslationOptionChange);
+    incomingToggle.addEventListener("change", () => {
+      void persistPanelSettings({ autoTranslateIncoming: incomingToggle.checked }).catch(() => {
+        incomingToggle.checked = !incomingToggle.checked;
+        setStatus("자동 번역 설정을 저장하지 못했습니다.", "error");
+      });
+      setStatus(
+        incomingToggle.checked
+          ? "지금부터 새로 받은 메시지를 한국어로 자동 번역합니다."
+          : "받은 메시지 자동 번역을 껐습니다."
+      );
+    });
     previewText.addEventListener("input", () => {
       refreshControls();
       if (previewIsCurrent()) {
@@ -377,6 +615,10 @@ export default defineContentScript({
       .then((response: BackgroundResponse<ExtensionSettings>) => {
         if (!response.ok) return;
         toneSelect.value = response.data.tone;
+        addressSelect.value = response.data.vietnameseAddress;
+        targetSelect.value = response.data.outgoingTargetLanguage;
+        incomingToggle.checked = response.data.autoTranslateIncoming;
+        currentSettings = response.data;
         if (!response.data.enabled) body.classList.add("zat-hidden");
         refreshControls();
       });

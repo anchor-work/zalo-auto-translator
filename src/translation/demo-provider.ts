@@ -13,6 +13,13 @@ const NATURAL_TRANSLATIONS = new Map<string, string>([
   ["내일 다시 연락할게요.", "Ngày mai tôi sẽ liên lạc lại nhé."]
 ]);
 
+const TO_KOREAN_TRANSLATIONS = new Map<string, string>([
+  ["Xin chào!", "안녕하세요!"],
+  ["Bạn đang ở đâu?", "지금 어디에 있어요?"],
+  ["Hello!", "안녕하세요!"],
+  ["Where are you now?", "지금 어디에 있어요?"]
+]);
+
 function applyTone(text: string, tone: TranslationRequest["tone"]): string {
   if (tone === "friendly") {
     return text.replace(/\.$/, " nhé!");
@@ -27,7 +34,10 @@ export async function translateWithDemo(
   request: TranslationRequest
 ): Promise<TranslationResult> {
   const normalized = request.text.trim();
-  const translated = NATURAL_TRANSLATIONS.get(normalized);
+  const translated =
+    request.targetLanguage === "ko"
+      ? TO_KOREAN_TRANSLATIONS.get(normalized)
+      : NATURAL_TRANSLATIONS.get(normalized);
 
   if (!translated) {
     throw new Error(

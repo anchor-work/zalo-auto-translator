@@ -31,6 +31,7 @@ const serviceHint = element<HTMLDivElement>("service-hint");
 const save = element<HTMLButtonElement>("save");
 const status = element<HTMLParagraphElement>("status");
 const isDevelopment = import.meta.env.DEV;
+let loadedSettings: ExtensionSettings | null = null;
 
 function updateModeVisibility(): void {
   modeLabel.hidden = !isDevelopment;
@@ -49,6 +50,7 @@ async function load(): Promise<void> {
   ];
 
   if (settingsResponse.ok) {
+    loadedSettings = settingsResponse.data;
     enabled.checked = settingsResponse.data.enabled;
     tone.value = settingsResponse.data.tone;
     mode.value = settingsResponse.data.mode;
@@ -73,7 +75,17 @@ save.addEventListener("click", async () => {
 
   try {
     const settings: ExtensionSettings = {
-      schemaVersion: 3,
+      ...(loadedSettings ?? {
+        schemaVersion: 4,
+        enabled: true,
+        tone: "natural",
+        vietnameseAddress: "neutral",
+        outgoingTargetLanguage: "vi",
+        autoTranslateIncoming: false,
+        mode: "local-api",
+        localApiBaseUrl: PRODUCTION_API_BASE_URL
+      }),
+      schemaVersion: 4,
       enabled: enabled.checked,
       tone: tone.value as TranslationTone,
       mode: isDevelopment ? (mode.value as TranslationMode) : "local-api",
@@ -91,6 +103,7 @@ save.addEventListener("click", async () => {
     } satisfies BackgroundMessage)) as BackgroundResponse<ExtensionSettings>;
 
     if (!response.ok) throw new Error(response.error);
+    loadedSettings = response.data;
     status.textContent = "저장했습니다. 열려 있는 Zalo 탭을 새로고침해 주세요.";
     status.className = "success";
   } catch (error) {

@@ -60,6 +60,34 @@ describe("Zalo DOM adapter", () => {
     expect(findSendButton(composer)).toBe(sendButton);
   });
 
+  it("finds an icon-only Zalo send control from its attributes", () => {
+    const wrapper = document.createElement("div");
+    const composer = document.createElement("div");
+    composer.contentEditable = "true";
+    const sendButton = document.createElement("div");
+    sendButton.setAttribute("role", "button");
+    sendButton.className = "chat-input-btn-send-msg";
+    wrapper.append(composer, sendButton);
+    document.body.append(wrapper);
+
+    expect(findSendButton(composer)).toBe(sendButton);
+  });
+
+  it("finds a generic button containing a send icon", () => {
+    const wrapper = document.createElement("div");
+    const composer = document.createElement("div");
+    composer.contentEditable = "true";
+    const sendButton = document.createElement("button");
+    sendButton.type = "button";
+    const icon = document.createElement("i");
+    icon.className = "Sent-msg_24_Line";
+    sendButton.append(icon);
+    wrapper.append(composer, sendButton);
+    document.body.append(wrapper);
+
+    expect(findSendButton(composer)).toBe(sendButton);
+  });
+
   it("writes translated text and confirms a send when the composer clears", async () => {
     const form = document.createElement("form");
     const composer = document.createElement("div");

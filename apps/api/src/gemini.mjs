@@ -1,20 +1,49 @@
 const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 const DEFAULT_MODEL = "gemini-3.1-flash-lite";
 const MAX_INPUT_CHARACTERS = 5_000;
+const SOURCE_LANGUAGES = new Set(["auto", "ko", "vi", "en"]);
+const TARGET_LANGUAGES = new Set(["ko", "vi", "en"]);
+const LANGUAGE_NAMES = {
+  auto: "the automatically detected source language",
+  ko: "Korean",
+  vi: "Vietnamese",
+  en: "English"
+};
 
 const TONE_INSTRUCTIONS = {
   natural:
-    "Use natural everyday Vietnamese. Keep the relationship neutral when age or gender is unknown.",
+    "Use natural everyday chat language without changing the meaning.",
   polite:
-    "Use polite, respectful but natural one-to-one Vietnamese chat. When age or gender is unknown, prefer neutral wording or 'bạn'. Do not use 'quý vị' unless the Korean source addresses a group or formal audience.",
+    "Use polite, respectful but natural one-to-one chat language.",
   friendly:
-    "Use warm, casual Vietnamese suitable for close friends, but do not invent age or gender.",
+    "Use warm, casual language suitable for close friends, but do not invent personal details.",
   coworker:
-    "Use natural, courteous Vietnamese suitable for a coworker. Keep professional warmth and avoid intimate or age-specific pronouns when the relationship is unknown.",
+    "Use natural, courteous language suitable for a coworker with professional warmth.",
   customer:
-    "Use clear, service-oriented and respectful Vietnamese for a one-to-one customer conversation. Avoid stiff mass-audience wording unless the source clearly addresses a group.",
+    "Use clear, service-oriented and respectful language for a one-to-one customer conversation.",
   elder:
-    "Use respectful Vietnamese suitable for speaking to an older person. Avoid guessing gender; phrase naturally without inventing a gender-specific title when it is unknown."
+    "Use respectful language suitable for speaking to an older person without inventing facts."
+};
+
+const VIETNAMESE_ADDRESS_INSTRUCTIONS = {
+  neutral:
+    "The relationship is unknown. Prefer tôi for the speaker and bạn for the recipient, or omit pronouns when that sounds more natural.",
+  older_male:
+    "The recipient is a slightly older man. Use em for the speaker and anh for the recipient.",
+  older_female:
+    "The recipient is a slightly older woman. Use em for the speaker and chị for the recipient.",
+  younger_from_male:
+    "The speaker is male and older than the recipient. Use anh for the speaker and em for the recipient.",
+  younger_from_female:
+    "The speaker is female and older than the recipient. Use chị for the speaker and em for the recipient.",
+  same_age:
+    "They are similar in age. Use mình for the speaker and bạn for the recipient when pronouns are needed.",
+  much_older_male:
+    "The recipient is a substantially older man. Use cháu for the speaker and chú for the recipient unless the source context clearly calls for bác.",
+  much_older_female:
+    "The recipient is a substantially older woman. Use cháu for the speaker and cô for the recipient unless the source context clearly calls for bác.",
+  customer:
+    "The recipient is a customer. Use tôi or chúng tôi for the speaker and anh/chị or quý khách naturally according to the sentence; do not write the literal combined token anh/chị when a pronoun can be omitted."
 };
 
 export class TranslationError extends Error {
@@ -42,18 +71,27 @@ export function validateTranslationRequest(value) {
   if (countCharacters(text) > MAX_INPUT_CHARACTERS) {
     throw new TranslationError("한 번에 최대 5,000자까지 번역할 수 있습니다.", 400, "text_too_long");
   }
-  if (value.sourceLanguage !== "ko" || value.targetLanguage !== "vi") {
-    throw new TranslationError("현재는 한국어에서 베트남어 번역만 지원합니다.", 400, "unsupported_language");
+  if (
+    !SOURCE_LANGUAGES.has(value.sourceLanguage) ||
+    !TARGET_LANGUAGES.has(value.targetLanguage) ||
+    value.sourceLanguage === value.targetLanguage
+  ) {
+    throw new TranslationError("지원하지 않는 번역 언어 조합입니다.", 400, "unsupported_language");
   }
   if (!Object.hasOwn(TONE_INSTRUCTIONS, value.tone)) {
     throw new TranslationError("지원하지 않는 말투입니다.", 400, "unsupported_tone");
   }
+  const vietnameseAddress = value.vietnameseAddress ?? "neutral";
+  if (!Object.hasOwn(VIETNAMESE_ADDRESS_INSTRUCTIONS, vietnameseAddress)) {
+    throw new TranslationError("지원하지 않는 베트남어 호칭 설정입니다.", 400, "unsupported_address");
+  }
 
   return {
     text,
-    sourceLanguage: "ko",
-    targetLanguage: "vi",
+    sourceLanguage: value.sourceLanguage,
+    targetLanguage: value.targetLanguage,
     tone: value.tone,
+    vietnameseAddress,
     requestId:
       typeof value.requestId === "string" && value.requestId.length <= 128
         ? value.requestId
@@ -103,12 +141,17 @@ export async function translateWithGemini(
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const systemInstruction = `You are a Korean-to-Vietnamese chat translation engine.
-Translate only the user's Korean message into Vietnamese.
+  const addressInstruction =
+    request.targetLanguage === "vi"
+      ? `Vietnamese address terms are important. ${VIETNAMESE_ADDRESS_INSTRUCTIONS[request.vietnameseAddress]}`
+      : "Preserve the social relationship and level of respect expressed in the source without inventing one.";
+  const systemInstruction = `You are a multilingual chat translation engine.
+Translate only the user's message from ${LANGUAGE_NAMES[request.sourceLanguage]} into ${LANGUAGE_NAMES[request.targetLanguage]}.
 Return only the translation, without explanations, labels, or quotation marks.
 Never answer the message or add information.
 Preserve names, numbers, URLs, phone numbers, emojis, and line breaks.
-${TONE_INSTRUCTIONS[request.tone]}`;
+${TONE_INSTRUCTIONS[request.tone]}
+${addressInstruction}`;
 
   try {
     const requestBody = JSON.stringify({

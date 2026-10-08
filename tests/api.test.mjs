@@ -33,6 +33,27 @@ describe("Gemini translation backend", () => {
     expect(countCharacters(request.text)).toBe(5);
   });
 
+  it("accepts Vietnamese or English incoming messages translated to Korean", () => {
+    expect(
+      validateTranslationRequest({
+        text: "Bạn khỏe không?",
+        sourceLanguage: "auto",
+        targetLanguage: "ko",
+        tone: "natural",
+        vietnameseAddress: "neutral"
+      })
+    ).toMatchObject({ sourceLanguage: "auto", targetLanguage: "ko" });
+    expect(
+      validateTranslationRequest({
+        text: "Please call me tomorrow.",
+        sourceLanguage: "en",
+        targetLanguage: "ko",
+        tone: "polite",
+        vietnameseAddress: "neutral"
+      })
+    ).toMatchObject({ sourceLanguage: "en", targetLanguage: "ko" });
+  });
+
   it("extracts a translation and usage from Gemini", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(
@@ -54,6 +75,31 @@ describe("Gemini translation backend", () => {
     );
     expect(result.translatedText).toBe("Xin chào!");
     expect(result.usage.totalTokens).toBe(54);
+  });
+
+  it("instructs Gemini to use the selected Vietnamese address terms", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ text: "Mai em sẽ gọi cho anh." }] } }]
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    await translateWithGemini(
+      validateTranslationRequest({
+        text: "내일 전화드릴게요.",
+        sourceLanguage: "ko",
+        targetLanguage: "vi",
+        tone: "polite",
+        vietnameseAddress: "older_male"
+      }),
+      { apiKey: "test-key", fetchImpl }
+    );
+
+    const requestBody = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    const instruction = requestBody.system_instruction.parts[0].text;
+    expect(instruction).toContain("Use em for the speaker and anh for the recipient");
   });
 
   it("uses the fallback model only after retryable primary failures", async () => {
