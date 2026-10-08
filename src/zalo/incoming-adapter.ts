@@ -21,6 +21,8 @@ const MESSAGE_CONTAINER_SELECTOR = [
 
 const OUTGOING_HINT = /(^|[\s_-])(outgoing|sent|right|self|mine|owner|me)(?=$|[\s_-])/i;
 const INCOMING_HINT = /(^|[\s_-])(incoming|received|receive|left|friend|other)(?=$|[\s_-])/i;
+const FALLBACK_TAGS = "div, p, span";
+const NON_MESSAGE_TEXT = /^(?:\d{1,2}:\d{2}|\d{4}[./-]\d{1,2}[./-]\d{1,2}|hôm nay|today|yesterday|어제|오늘)$/i;
 
 export interface IncomingMessageCandidate {
   container: HTMLElement;
@@ -50,7 +52,51 @@ function directionHints(container: HTMLElement): string {
     .join(" ");
 }
 
-function isIncoming(container: HTMLElement, textElement: HTMLElement): boolean {
+interface ConversationBounds {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+function visibleComposerBounds(): ConversationBounds | null {
+  const best = Array.from(
+    document.querySelectorAll<HTMLElement>('[contenteditable="true"]')
+  )
+    .filter((composer) => !composer.closest("#zalo-auto-translator-root"))
+    .map((composer) => composer.getBoundingClientRect())
+    .filter(
+      (rect) =>
+        rect.width > 180 &&
+        rect.height > 15 &&
+        rect.bottom <= window.innerHeight + 10
+    )
+    .sort((left, right) => right.width - left.width)[0];
+  if (!best) return null;
+  return {
+    left: Math.max(0, best.left - 24),
+    right: Math.min(window.innerWidth, best.right + 24),
+    top: 48,
+    bottom: Math.max(120, best.top - 8)
+  };
+}
+
+function conversationBounds(): ConversationBounds {
+  return (
+    visibleComposerBounds() ?? {
+      left: 0,
+      right: window.innerWidth,
+      top: 48,
+      bottom: window.innerHeight * 0.9
+    }
+  );
+}
+
+function isIncoming(
+  container: HTMLElement,
+  textElement: HTMLElement,
+  bounds: ConversationBounds
+): boolean {
   const hints = directionHints(container);
   if (OUTGOING_HINT.test(hints) || container.getAttribute("data-from-me") === "true") {
     return false;
@@ -61,41 +107,125 @@ function isIncoming(container: HTMLElement, textElement: HTMLElement): boolean {
 
   const rect = textElement.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return false;
-  const viewportWidth = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
-  const conversationStart = Math.max(240, viewportWidth * 0.24);
-  return rect.left >= conversationStart && rect.left < viewportWidth * 0.62;
+  const measuredContainerRect = container.getBoundingClientRect();
+  const containerRect =
+    measuredContainerRect.width > 0 && measuredContainerRect.height > 0
+      ? measuredContainerRect
+      : rect;
+  const conversationWidth = Math.max(1, bounds.right - bounds.left);
+  if (
+    containerRect.bottom < bounds.top ||
+    containerRect.top > bounds.bottom ||
+    containerRect.right < bounds.left ||
+    containerRect.left > bounds.right
+  ) return false;
+
+  const nearRightEdge = containerRect.right >= bounds.right - conversationWidth * 0.08;
+  if (nearRightEdge) return false;
+  const nearLeftEdge = containerRect.left <= bounds.left + conversationWidth * 0.22;
+  return nearLeftEdge || containerRect.left + containerRect.width / 2 < bounds.left + conversationWidth * 0.55;
+}
+
+function hasDirectMessageText(element: HTMLElement): boolean {
+  const text = normalizedText(element);
+  if (!text || text.length > 5_000 || NON_MESSAGE_TEXT.test(text)) return false;
+  if (!Array.from(element.childNodes).some((node) =>
+    node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim())
+  )) return false;
+
+  const rect = element.getBoundingClientRect();
+  return (
+    rect.width >= 24 &&
+    rect.height >= 14 &&
+    rect.width <= window.innerWidth * 0.82 &&
+    rect.height <= Math.max(320, window.innerHeight * 0.4)
+  );
+}
+
+function hasBubbleAppearance(element: HTMLElement): boolean {
+  const style = window.getComputedStyle(element);
+  const background = style.backgroundColor.replace(/\s/g, "").toLowerCase();
+  const hasBackground =
+    background !== "" &&
+    background !== "transparent" &&
+    background !== "rgba(0,0,0,0)";
+  const radius = Math.max(
+    Number.parseFloat(style.borderTopLeftRadius) || 0,
+    Number.parseFloat(style.borderTopRightRadius) || 0,
+    Number.parseFloat(style.borderBottomLeftRadius) || 0,
+    Number.parseFloat(style.borderBottomRightRadius) || 0
+  );
+  return hasBackground && radius >= 4;
+}
+
+function visualBubbleFor(textElement: HTMLElement): HTMLElement | null {
+  let current: HTMLElement | null = textElement;
+  for (let depth = 0; current && depth < 6; depth += 1) {
+    const rect = current.getBoundingClientRect();
+    if (
+      hasBubbleAppearance(current) &&
+      rect.width > 40 &&
+      rect.width <= window.innerWidth * 0.82 &&
+      rect.height <= Math.max(360, window.innerHeight * 0.45)
+    ) return current;
+    current = current.parentElement;
+  }
+  return null;
 }
 
 function candidateElements(root: ParentNode): HTMLElement[] {
-  const candidates: HTMLElement[] = [];
+  const candidates = new Set<HTMLElement>();
   if (root instanceof HTMLElement && root.matches(MESSAGE_TEXT_SELECTOR)) {
-    candidates.push(root);
+    candidates.add(root);
   }
   root.querySelectorAll<HTMLElement>(MESSAGE_TEXT_SELECTOR).forEach((element) => {
-    candidates.push(element);
+    candidates.add(element);
   });
-  return candidates;
+
+  if (root instanceof HTMLElement && root.matches(FALLBACK_TAGS) && hasDirectMessageText(root)) {
+    candidates.add(root);
+  }
+  root.querySelectorAll<HTMLElement>(FALLBACK_TAGS).forEach((element) => {
+    if (hasDirectMessageText(element)) candidates.add(element);
+  });
+  return [...candidates];
 }
 
 export function findIncomingMessages(root: ParentNode = document): IncomingMessageCandidate[] {
   const results: IncomingMessageCandidate[] = [];
   const seenContainers = new Set<HTMLElement>();
+  const bounds = conversationBounds();
 
   for (const textElement of candidateElements(root)) {
     if (
       textElement.closest("#zalo-auto-translator-root") ||
+      textElement.closest(".zat-incoming-tools") ||
       textElement.closest('[contenteditable="true"], textarea, input, nav, aside') ||
       textElement.closest("[aria-hidden='true']")
     ) continue;
 
-    const container =
-      textElement.parentElement?.closest<HTMLElement>(MESSAGE_CONTAINER_SELECTOR) ?? textElement;
+    const semanticContainer =
+      textElement.parentElement?.closest<HTMLElement>(MESSAGE_CONTAINER_SELECTOR) ?? null;
+    const visualContainer = visualBubbleFor(textElement);
+    const semanticHasDirection = semanticContainer
+      ? OUTGOING_HINT.test(directionHints(semanticContainer)) ||
+        INCOMING_HINT.test(directionHints(semanticContainer)) ||
+        semanticContainer.hasAttribute("data-from-me")
+      : false;
+    const container = semanticHasDirection
+      ? semanticContainer!
+      : visualContainer ?? semanticContainer ?? textElement;
     if (seenContainers.has(container) || container.dataset.zatIncomingDecorated === "true") {
       continue;
     }
 
     const text = normalizedText(textElement);
-    if (!text || text.length > 5_000 || !isIncoming(container, textElement)) continue;
+    if (
+      !text ||
+      text.length > 5_000 ||
+      NON_MESSAGE_TEXT.test(text) ||
+      !isIncoming(container, textElement, bounds)
+    ) continue;
 
     seenContainers.add(container);
     results.push({ container, textElement, text });

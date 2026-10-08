@@ -64,4 +64,61 @@ describe("incoming Zalo message adapter", () => {
 
     expect(findIncomingMessages()).toEqual([]);
   });
+
+  it("detects an incoming visual bubble even when Zalo class names are opaque", () => {
+    const composer = document.createElement("div");
+    composer.contentEditable = "true";
+    document.body.append(composer);
+    vi.spyOn(composer, "getBoundingClientRect").mockReturnValue({
+      x: 20,
+      y: 700,
+      left: 20,
+      top: 700,
+      right: 1180,
+      bottom: 750,
+      width: 1160,
+      height: 50,
+      toJSON: () => ({})
+    });
+
+    const incoming = document.createElement("div");
+    incoming.className = "x1a2b3";
+    incoming.style.backgroundColor = "white";
+    incoming.style.borderRadius = "12px";
+    incoming.textContent = "Tôi có thể hiểu được.";
+    document.body.append(incoming);
+    vi.spyOn(incoming, "getBoundingClientRect").mockReturnValue({
+      x: 80,
+      y: 120,
+      left: 80,
+      top: 120,
+      right: 620,
+      bottom: 180,
+      width: 540,
+      height: 60,
+      toJSON: () => ({})
+    });
+
+    const outgoing = document.createElement("div");
+    outgoing.className = "z9y8x7";
+    outgoing.style.backgroundColor = "lightblue";
+    outgoing.style.borderRadius = "12px";
+    outgoing.textContent = "Anh đã thanh toán rồi.";
+    document.body.append(outgoing);
+    vi.spyOn(outgoing, "getBoundingClientRect").mockReturnValue({
+      x: 600,
+      y: 220,
+      left: 600,
+      top: 220,
+      right: 1180,
+      bottom: 280,
+      width: 580,
+      height: 60,
+      toJSON: () => ({})
+    });
+
+    expect(findIncomingMessages()).toEqual([
+      { container: incoming, textElement: incoming, text: "Tôi có thể hiểu được." }
+    ]);
+  });
 });
