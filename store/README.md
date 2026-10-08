@@ -4,6 +4,7 @@
 
 - 업로드 패키지: `.output/zalo-auto-translator-0.6.0-chrome.zip`
 - 스토어 아이콘: `store/assets/icon-128.png`
+- 스토어 스크린샷: `store/assets/screenshots/01-translation-preview-1280x800.png`
 - 등록 문구와 권한 설명: `store/listing-ko.md`
 - 개인정보처리방침 원문: `docs/privacy/index.md`
 
