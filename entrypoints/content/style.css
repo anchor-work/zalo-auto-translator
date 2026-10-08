@@ -1,0 +1,147 @@
+:host {
+  all: initial;
+  color: #172033;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.zat-panel {
+  background: #ffffff;
+  border: 1px solid #d9e2f1;
+  border-radius: 14px;
+  bottom: 20px;
+  box-shadow: 0 12px 34px rgba(22, 34, 55, 0.2);
+  color: #172033;
+  font-size: 14px;
+  line-height: 1.45;
+  position: fixed;
+  right: 20px;
+  width: min(330px, calc(100vw - 40px));
+  z-index: 2147483647;
+}
+
+.zat-header {
+  align-items: center;
+  border-bottom: 1px solid #edf1f7;
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.zat-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.zat-status {
+  color: #536176;
+  margin: 0;
+}
+
+.zat-success {
+  color: #18794e;
+}
+
+.zat-error {
+  color: #c52a2a;
+}
+
+.zat-hint {
+  color: #718096;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+label {
+  color: #364156;
+  display: grid;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 6px;
+}
+
+select,
+textarea {
+  background: #fff;
+  border: 1px solid #c9d3e3;
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #172033;
+  font: inherit;
+  padding: 9px 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 3px solid rgba(40, 103, 232, 0.25);
+  outline-offset: 2px;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  padding: 10px 12px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.zat-primary {
+  background: #2867e8;
+  color: #fff;
+}
+
+.zat-primary:hover:not(:disabled) {
+  background: #1d56c6;
+}
+
+.zat-secondary {
+  background: #edf1f7;
+  color: #263247;
+}
+
+.zat-icon-button {
+  background: transparent;
+  color: #536176;
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 8px;
+}
+
+.zat-preview {
+  display: grid;
+  gap: 10px;
+}
+
+.zat-preview.zat-stale {
+  opacity: 0.65;
+}
+
+.zat-preview.zat-stale textarea {
+  border-color: #c98b00;
+}
+
+.zat-preview.zat-stale::before {
+  color: #9a6700;
+  content: "원문 또는 말투가 변경되었습니다. 다시 번역해 주세요.";
+  font-size: 11px;
+}
+
+.zat-actions,
+.zat-source-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1.5fr;
+}
+
+.zat-hidden {
+  display: none !important;
+}

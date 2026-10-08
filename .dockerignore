@@ -1,0 +1,14 @@
+.git
+.github
+.output
+.wxt
+node_modules
+coverage
+tests
+entrypoints
+src
+*.log
+*.zip
+.env
+.env.*
+apps/api/.env.local

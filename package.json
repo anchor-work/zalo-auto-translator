@@ -1,0 +1,24 @@
+{
+  "name": "zalo-auto-translator",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "api:dev": "node --use-env-proxy --env-file-if-exists=apps/api/.env.local --watch apps/api/src/server.mjs",
+    "api:start": "node --use-env-proxy --env-file-if-exists=apps/api/.env.local apps/api/src/server.mjs",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.36",
+    "happy-dom": "^20.14.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3",
+    "wxt": "^0.21.4"
+  }
+}

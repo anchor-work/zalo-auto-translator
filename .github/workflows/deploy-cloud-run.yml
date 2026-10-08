@@ -1,0 +1,96 @@
+name: Deploy translation API to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/deploy-cloud-run.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cloud-run-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_PROJECT_ID: gen-lang-client-0890959839
+  GCP_REGION: asia-northeast3
+  CLOUD_RUN_SERVICE: zalo-translator-api
+  ARTIFACT_REPOSITORY: zalo-translator
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run type check
+        run: npm run typecheck
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Artifact Registry authentication
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build container image
+        run: |
+          docker build \
+            --tag "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/${CLOUD_RUN_SERVICE}:${GITHUB_SHA}" \
+            .
+
+      - name: Push container image
+        run: |
+          docker push \
+            "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/${CLOUD_RUN_SERVICE}:${GITHUB_SHA}"
+
+      - name: Deploy Cloud Run revision
+        run: |
+          gcloud run deploy "${CLOUD_RUN_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --image="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/${CLOUD_RUN_SERVICE}:${GITHUB_SHA}" \
+            --service-account="zalo-translator-runtime@${GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --set-secrets="ZALO_GEMINI_API_KEY=ZALO_GEMINI_API_KEY:latest" \
+            --set-env-vars="ZALO_GEMINI_MODEL=gemini-3.1-flash-lite,ZALO_GEMINI_FALLBACK_MODEL=gemini-3.5-flash-lite" \
+            --allow-unauthenticated \
+            --min-instances=0 \
+            --max-instances=3 \
+            --concurrency=40 \
+            --cpu=1 \
+            --memory=512Mi \
+            --timeout=60 \
+            --port=8080 \
+            --quiet
+
+      - name: Show deployed service URL
+        run: |
+          gcloud run services describe "${CLOUD_RUN_SERVICE}" \
+            --project="${GCP_PROJECT_ID}" \
+            --region="${GCP_REGION}" \
+            --format="value(status.url)"
