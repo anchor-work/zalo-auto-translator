@@ -146,12 +146,35 @@ ${TONE_INSTRUCTIONS[request.tone]}`;
         continue;
       }
 
+      const providerFailure =
+        response.status === 400
+          ? {
+              message:
+                "Gemini가 요청을 거부했습니다 (HTTP 400). Secret Manager의 API 키 값과 모델 설정을 확인해 주세요.",
+              code: "provider_bad_request"
+            }
+          : response.status === 401 || response.status === 403
+            ? {
+                message:
+                  "Gemini 인증에 실패했습니다. API 키와 Generative Language API 권한을 확인해 주세요.",
+                code: "provider_auth_failed"
+              }
+            : response.status === 404
+              ? {
+                  message: "설정된 Gemini 모델을 찾을 수 없습니다.",
+                  code: "provider_model_not_found"
+                }
+              : {
+                  message: "Gemini 번역 요청에 실패했습니다.",
+                  code: "provider_error"
+                };
+
       throw new TranslationError(
         retryable
           ? "Gemini 사용량이 많습니다. 잠시 후 다시 시도해 주세요."
-          : "Gemini 번역 요청에 실패했습니다.",
+          : providerFailure.message,
         retryable ? 503 : 502,
-        retryable ? "provider_busy" : "provider_error"
+        retryable ? "provider_busy" : providerFailure.code
       );
     }
 

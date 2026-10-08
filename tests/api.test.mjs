@@ -91,6 +91,30 @@ describe("Gemini translation backend", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it("returns an actionable error for a rejected Gemini request", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { status: "INVALID_ARGUMENT" } }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+
+    await expect(
+      translateWithGemini(
+        validateTranslationRequest({
+          text: "안녕하세요",
+          sourceLanguage: "ko",
+          targetLanguage: "vi",
+          tone: "natural"
+        }),
+        { apiKey: "test-key", fetchImpl }
+      )
+    ).rejects.toMatchObject({
+      code: "provider_bad_request",
+      message: expect.stringContaining("Secret Manager")
+    });
+  });
+
   it("serves a privacy-safe translation response", async () => {
     const translate = vi.fn().mockResolvedValue({
       translatedText: "Bây giờ bạn đang ở đâu?",
