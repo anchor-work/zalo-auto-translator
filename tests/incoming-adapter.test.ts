@@ -34,6 +34,68 @@ describe("incoming Zalo message adapter", () => {
     ]);
   });
 
+  it("uses Zalo's structured received-message attributes for a long group message", () => {
+    const frame = document.createElement("div");
+    frame.id = "message-frame_1791451925708";
+    frame.className = "last-msg show-sender card shadow-bubble message-frame";
+    frame.dataset.component = "message-content-view";
+    frame.innerHTML = `
+      <div data-id="div_DisabledTargetEventLayer">
+        <div class="message-sender-name-wrapper">
+          <div class="truncate">Kim Đan Trí Luật</div>
+        </div>
+        <div class="message-action">
+          <div class="text-message__container" data-id="div_ReceivedMsg_Text">
+            <div data-component="message-text-content">
+              <span-15 data-component="text-container">
+                <span class="text">Dạ anh Sean,
+Với tổng số tiền lớn, rủi ro này thường phát sinh vào thời điểm cơ quan Thuế quyết toán công ty.
+Anh xem xét phương án này nhé, nếu cần hỗ trợ thì bên em có cung cấp dịch vụ này ạ.</span>
+              </span-15>
+            </div>
+          </div>
+        </div>
+        <div class="card-send-time"><span>16:32</span></div>
+        <div class="message-reaction-container">/-heart</div>
+      </div>`;
+    document.body.append(frame);
+    vi.spyOn(frame, "getBoundingClientRect").mockReturnValue({
+      x: 74, y: 95, left: 74, top: 95, right: 1505, bottom: 310,
+      width: 1431, height: 215, toJSON: () => ({})
+    });
+
+    const textElement = frame.querySelector<HTMLElement>(
+      '[data-component="text-container"]'
+    )!;
+    textElement.textContent =
+      "Dạ anh Sean,\nVới tổng số tiền lớn, rủi ro này thường phát sinh vào thời điểm cơ quan Thuế quyết toán công ty.\nAnh xem xét phương án này nhé, nếu cần hỗ trợ thì bên em có cung cấp dịch vụ này ạ.";
+    expect(findIncomingMessages()).toEqual([
+      {
+        container: frame,
+        textElement,
+        text: "Dạ anh Sean,\nVới tổng số tiền lớn, rủi ro này thường phát sinh vào thời điểm cơ quan Thuế quyết toán công ty.\nAnh xem xét phương án này nhé, nếu cần hỗ trợ thì bên em có cung cấp dịch vụ này ạ."
+      }
+    ]);
+  });
+
+  it("excludes structured sent messages and structured file messages", () => {
+    const sentFrame = document.createElement("div");
+    sentFrame.dataset.component = "message-content-view";
+    sentFrame.innerHTML = `
+      <div data-id="div_SentMsg_Text">
+        <span data-component="text-container">내가 보낸 메시지</span>
+      </div>`;
+    const fileFrame = document.createElement("div");
+    fileFrame.dataset.component = "message-content-view";
+    fileFrame.innerHTML = `
+      <div data-id="div_ReceivedMsg_File">
+        <span>contract.pdf</span><span>194.28 KB</span>
+      </div>`;
+    document.body.append(sentFrame, fileFrame);
+
+    expect(findIncomingMessages()).toEqual([]);
+  });
+
   it("uses the visual bubble as the overlay anchor when the semantic row is wider", () => {
     const row = document.createElement("div");
     row.className = "message-row incoming";

@@ -43,6 +43,8 @@ const PAGE_CHROME_SELECTOR = [
   "[class*='group-header']",
   "[class*='thread-header']"
 ].join(",");
+const ZALO_MESSAGE_FRAME_SELECTOR = '[data-component="message-content-view"]';
+const ZALO_RECEIVED_TEXT_SELECTOR = '[data-id*="ReceivedMsg_Text"]';
 
 export interface IncomingMessageCandidate {
   container: HTMLElement;
@@ -62,21 +64,29 @@ export function incomingCandidateStillMatches(
     .every((line) => currentText.includes(line));
 }
 
-function normalizedText(element: HTMLElement): string {
-  return (element.innerText || element.textContent || "")
+function normalizedValue(value: string): string {
+  return value
     .replace(/\u00a0/g, " ")
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-function messageText(element: HTMLElement): string {
-  const lines = normalizedText(element)
+function normalizedText(element: HTMLElement): string {
+  return normalizedValue(element.innerText || element.textContent || "");
+}
+
+function cleanMessageText(value: string): string {
+  const lines = normalizedValue(value)
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
   while (lines.length > 1 && NON_MESSAGE_TEXT.test(lines.at(-1) ?? "")) lines.pop();
   return lines.join("\n").trim();
+}
+
+function messageText(element: HTMLElement): string {
+  return cleanMessageText(element.innerText || element.textContent || "");
 }
 
 function directionHints(container: HTMLElement): string {
@@ -432,14 +442,52 @@ function mergeMessageGroups(
   return merged;
 }
 
+function structuredIncomingMessages(
+  root: ParentNode,
+  bounds: ConversationBounds
+): IncomingMessageCandidate[] {
+  const results: IncomingMessageCandidate[] = [];
+  const seenFrames = new Set<HTMLElement>();
+  root.querySelectorAll<HTMLElement>(ZALO_RECEIVED_TEXT_SELECTOR).forEach((received) => {
+    const frame = received.closest<HTMLElement>(ZALO_MESSAGE_FRAME_SELECTOR);
+    if (!frame || seenFrames.has(frame)) return;
+    const textElement =
+      received.querySelector<HTMLElement>('[data-component="text-container"]') ??
+      received.querySelector<HTMLElement>('[data-component="message-text-content"]') ??
+      received;
+    const text = cleanMessageText(textElement.textContent || textElement.innerText || "");
+    if (
+      !text ||
+      text.length > 5_000 ||
+      NON_MESSAGE_TEXT.test(text) ||
+      SYSTEM_TEXT.test(text) ||
+      URL_OR_EMAIL_ONLY.test(text) ||
+      !HAS_LETTER.test(text)
+    ) return;
+
+    const rect = frame.getBoundingClientRect();
+    if (
+      rect.width > 0 &&
+      rect.height > 0 &&
+      (rect.bottom < bounds.top || rect.top > bounds.bottom)
+    ) return;
+
+    seenFrames.add(frame);
+    results.push({ container: frame, textElement, text });
+  });
+  return results;
+}
+
 export function findIncomingMessages(root: ParentNode = document): IncomingMessageCandidate[] {
   const groups = new Map<HTMLElement, MessageGroup>();
   const bounds = conversationBounds();
+  const structuredResults = structuredIncomingMessages(root, bounds);
 
   for (const textElement of candidateElements(root)) {
     if (
       textElement.closest("#zalo-auto-translator-root") ||
       textElement.closest(".zat-incoming-tools, .zat-incoming-overlay") ||
+      textElement.closest(ZALO_MESSAGE_FRAME_SELECTOR) ||
       textElement.closest('[contenteditable="true"], textarea, input, nav, aside') ||
       textElement.closest(PAGE_CHROME_SELECTOR) ||
       textElement.closest("[aria-hidden='true']")
@@ -482,7 +530,7 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
     groups.set(container, group);
   }
 
-  const results: IncomingMessageCandidate[] = [];
+  const results: IncomingMessageCandidate[] = [...structuredResults];
   mergeMessageGroups([...groups.values()], bounds).forEach(({ container, elements }) => {
     if (isFileOrMediaMessage(container)) return;
 
