@@ -113,6 +113,11 @@ interface ConversationBounds {
   bottom: number;
 }
 
+interface MessageGroup {
+  container: HTMLElement;
+  elements: Set<HTMLElement>;
+}
+
 function visibleComposerBounds(): ConversationBounds | null {
   const best = Array.from(
     document.querySelectorAll<HTMLElement>('[contenteditable="true"]')
@@ -174,10 +179,11 @@ function isIncoming(
     containerRect.left > bounds.right
   ) return false;
 
+  const nearLeftEdge = containerRect.left <= bounds.left + conversationWidth * 0.24;
+  if (nearLeftEdge) return true;
   const nearRightEdge = containerRect.right >= bounds.right - conversationWidth * 0.08;
   if (nearRightEdge) return false;
-  const nearLeftEdge = containerRect.left <= bounds.left + conversationWidth * 0.22;
-  return nearLeftEdge || containerRect.left + containerRect.width / 2 < bounds.left + conversationWidth * 0.55;
+  return containerRect.left + containerRect.width / 2 < bounds.left + conversationWidth * 0.55;
 }
 
 function hasDirectMessageText(element: HTMLElement): boolean {
@@ -196,8 +202,8 @@ function hasDirectMessageText(element: HTMLElement): boolean {
   return (
     rect.width >= 24 &&
     rect.height >= 14 &&
-    rect.width <= window.innerWidth * 0.82 &&
-    rect.height <= Math.max(320, window.innerHeight * 0.4)
+    rect.width <= window.innerWidth * 0.96 &&
+    rect.height <= Math.max(560, window.innerHeight * 0.75)
   );
 }
 
@@ -220,13 +226,13 @@ function hasBubbleAppearance(element: HTMLElement): boolean {
 function visualBubbleFor(textElement: HTMLElement): HTMLElement | null {
   let current: HTMLElement | null = textElement;
   let outermostBubble: HTMLElement | null = null;
-  for (let depth = 0; current && depth < 6; depth += 1) {
+  for (let depth = 0; current && depth < 14; depth += 1) {
     const rect = current.getBoundingClientRect();
     if (
       hasBubbleAppearance(current) &&
       rect.width > 40 &&
-      rect.width <= window.innerWidth * 0.82 &&
-      rect.height <= Math.max(360, window.innerHeight * 0.45)
+      rect.width <= window.innerWidth * 0.96 &&
+      rect.height <= Math.max(560, window.innerHeight * 0.75)
     ) outermostBubble = current;
     current = current.parentElement;
   }
@@ -239,8 +245,9 @@ function hintsBetween(
   pattern: RegExp
 ): boolean {
   let current: HTMLElement | null = element;
-  while (current && current !== boundary) {
+  while (current) {
     if (pattern.test(elementHints(current))) return true;
+    if (current === boundary) break;
     current = current.parentElement;
   }
   return false;
@@ -248,10 +255,11 @@ function hintsBetween(
 
 function isInsideQuotedBlock(element: HTMLElement, boundary: HTMLElement): boolean {
   let current: HTMLElement | null = element;
-  while (current && current !== boundary) {
+  while (current) {
     if (QUOTE_HINT.test(elementHints(current))) return true;
     const style = window.getComputedStyle(current);
     if ((Number.parseFloat(style.borderLeftWidth) || 0) >= 2) return true;
+    if (current === boundary) break;
     current = current.parentElement;
   }
   return false;
@@ -282,11 +290,14 @@ function looksLikeSenderName(
 
   const weight = window.getComputedStyle(element).fontWeight;
   const isBold = weight === "bold" || (Number.parseInt(weight, 10) || 0) >= 600;
-  if (!isBold) return false;
   const rect = element.getBoundingClientRect();
   return otherElements.some((other) => {
     const otherRect = other.getBoundingClientRect();
-    return otherRect.top >= rect.bottom - 2;
+    if (otherRect.top < rect.bottom - 2) return false;
+    const otherText = messageText(other);
+    const followedByLongerBody =
+      otherText.length >= Math.max(24, Math.ceil(text.length * 1.5));
+    return isBold || followedByLongerBody;
   });
 }
 
@@ -341,12 +352,87 @@ function candidateElements(root: ParentNode): HTMLElement[] {
   return [...candidates];
 }
 
-export function findIncomingMessages(root: ParentNode = document): IncomingMessageCandidate[] {
-  interface MessageGroup {
-    container: HTMLElement;
-    elements: Set<HTMLElement>;
+function nearestCommonElement(
+  left: HTMLElement,
+  right: HTMLElement
+): HTMLElement | null {
+  const leftAncestors = new Set<HTMLElement>();
+  let current: HTMLElement | null = left;
+  while (current) {
+    leftAncestors.add(current);
+    current = current.parentElement;
   }
+  current = right;
+  while (current) {
+    if (leftAncestors.has(current)) return current;
+    current = current.parentElement;
+  }
+  return null;
+}
 
+function sharedMessageContainer(
+  left: HTMLElement,
+  right: HTMLElement,
+  bounds: ConversationBounds
+): HTMLElement | null {
+  if (left.contains(right)) return left;
+  if (right.contains(left)) return right;
+
+  const common = nearestCommonElement(left, right);
+  if (!common || common === document.body || common === document.documentElement) {
+    return null;
+  }
+  if (common.closest(PAGE_CHROME_SELECTOR)) return null;
+
+  const rect = common.getBoundingClientRect();
+  const conversationWidth = Math.max(1, bounds.right - bounds.left);
+  const plausibleSize =
+    rect.width >= 40 &&
+    rect.height >= 18 &&
+    rect.width <= conversationWidth * 0.96 &&
+    rect.height <= Math.max(560, window.innerHeight * 0.75);
+  if (!plausibleSize) return null;
+  if (
+    !hasBubbleAppearance(common) &&
+    !common.hasAttribute("data-message-id") &&
+    !common.hasAttribute("data-msg-id")
+  ) {
+    return null;
+  }
+  return common;
+}
+
+function mergeMessageGroups(
+  groups: MessageGroup[],
+  bounds: ConversationBounds
+): MessageGroup[] {
+  const merged = [...groups];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let leftIndex = 0; leftIndex < merged.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < merged.length; rightIndex += 1) {
+        const left = merged[leftIndex]!;
+        const right = merged[rightIndex]!;
+        const container = sharedMessageContainer(
+          left.container,
+          right.container,
+          bounds
+        );
+        if (!container) continue;
+        right.elements.forEach((element) => left.elements.add(element));
+        left.container = container;
+        merged.splice(rightIndex, 1);
+        changed = true;
+        break;
+      }
+      if (changed) break;
+    }
+  }
+  return merged;
+}
+
+export function findIncomingMessages(root: ParentNode = document): IncomingMessageCandidate[] {
   const groups = new Map<HTMLElement, MessageGroup>();
   const bounds = conversationBounds();
 
@@ -397,7 +483,7 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
   }
 
   const results: IncomingMessageCandidate[] = [];
-  groups.forEach(({ container, elements }) => {
+  mergeMessageGroups([...groups.values()], bounds).forEach(({ container, elements }) => {
     if (isFileOrMediaMessage(container)) return;
 
     const allElements = [...elements];

@@ -156,6 +156,139 @@ describe("incoming Zalo message adapter", () => {
     ]);
   });
 
+  it("collapses deeply nested reply fragments into one outer message", () => {
+    const row = document.createElement("div");
+    row.className = "message-row incoming";
+    const bubble = document.createElement("div");
+    bubble.style.backgroundColor = "white";
+    bubble.style.borderRadius = "10px";
+
+    const quote = document.createElement("div");
+    quote.className = "quoted-reply";
+    quote.style.backgroundColor = "rgb(240, 242, 246)";
+    quote.style.borderLeft = "3px solid blue";
+    quote.style.borderRadius = "4px";
+    const quoteText = document.createElement("span");
+    quoteText.className = "message-text";
+    quoteText.textContent = "Anh đã thanh toán tiền thuê nhà rồi";
+    quote.append(quoteText);
+
+    let bodyParent: HTMLElement = bubble;
+    for (let depth = 0; depth < 8; depth += 1) {
+      const wrapper = document.createElement("div");
+      bodyParent.append(wrapper);
+      bodyParent = wrapper;
+    }
+    const body = document.createElement("span");
+    body.className = "message-text";
+    body.textContent = "dạ em đã nhận được nha";
+    bodyParent.append(body);
+    bubble.prepend(quote);
+    row.append(bubble);
+    document.body.append(row);
+
+    const bubbleRect = {
+      x: 50, y: 120, left: 50, top: 120, right: 890, bottom: 280,
+      width: 840, height: 160, toJSON: () => ({})
+    };
+    vi.spyOn(bubble, "getBoundingClientRect").mockReturnValue(bubbleRect);
+    vi.spyOn(quote, "getBoundingClientRect").mockReturnValue({
+      ...bubbleRect, left: 65, top: 130, right: 870, bottom: 190,
+      width: 805, height: 60
+    });
+    vi.spyOn(quoteText, "getBoundingClientRect").mockReturnValue({
+      ...bubbleRect, left: 75, top: 145, right: 850, bottom: 175,
+      width: 775, height: 30
+    });
+    vi.spyOn(body, "getBoundingClientRect").mockReturnValue({
+      ...bubbleRect, left: 65, top: 220, right: 300, bottom: 245,
+      width: 235, height: 25
+    });
+
+    expect(findIncomingMessages()).toEqual([
+      { container: bubble, textElement: body, text: "dạ em đã nhận được nha" }
+    ]);
+  });
+
+  it("detects a long incoming bubble that reaches the right side", () => {
+    const bubble = document.createElement("div");
+    bubble.style.backgroundColor = "white";
+    bubble.style.borderRadius = "10px";
+    const sender = document.createElement("span");
+    sender.textContent = "Kim Dan Trí Luật";
+    const text = document.createElement("span");
+    text.className = "message-text";
+    text.textContent =
+      "Với tổng số tiền lớn, rủi ro này thường phát sinh vào thời điểm quyết toán công ty.";
+    bubble.append(sender, text);
+    document.body.append(bubble);
+
+    vi.spyOn(bubble, "getBoundingClientRect").mockReturnValue({
+      x: 45, y: 120, left: 45, top: 120, right: 1150, bottom: 360,
+      width: 1105, height: 240, toJSON: () => ({})
+    });
+    vi.spyOn(text, "getBoundingClientRect").mockReturnValue({
+      x: 65, y: 145, left: 65, top: 145, right: 1120, bottom: 330,
+      width: 1055, height: 185, toJSON: () => ({})
+    });
+    vi.spyOn(sender, "getBoundingClientRect").mockReturnValue({
+      x: 65, y: 125, left: 65, top: 125, right: 190, bottom: 140,
+      width: 125, height: 15, toJSON: () => ({})
+    });
+
+    expect(findIncomingMessages()).toEqual([
+      {
+        container: bubble,
+        textElement: text,
+        text: "Với tổng số tiền lớn, rủi ro này thường phát sinh vào thời điểm quyết toán công ty."
+      }
+    ]);
+  });
+
+  it("does not merge two sibling message bubbles from the same sender group", () => {
+    const senderGroup = document.createElement("div");
+    senderGroup.className = "message-row incoming";
+    const firstBubble = document.createElement("div");
+    firstBubble.style.backgroundColor = "white";
+    firstBubble.style.borderRadius = "10px";
+    const first = document.createElement("span");
+    first.className = "message-text";
+    first.textContent = "ㅋㅋㅋㅋ";
+    firstBubble.append(first);
+    const secondBubble = document.createElement("div");
+    secondBubble.style.backgroundColor = "white";
+    secondBubble.style.borderRadius = "10px";
+    const second = document.createElement("span");
+    second.className = "message-text";
+    second.textContent = "시간이 오래 걸렸네요";
+    secondBubble.append(second);
+    senderGroup.append(firstBubble, secondBubble);
+    document.body.append(senderGroup);
+
+    vi.spyOn(senderGroup, "getBoundingClientRect").mockReturnValue({
+      x: 40, y: 100, left: 40, top: 100, right: 500, bottom: 220,
+      width: 460, height: 120, toJSON: () => ({})
+    });
+    vi.spyOn(firstBubble, "getBoundingClientRect").mockReturnValue({
+      x: 55, y: 110, left: 55, top: 110, right: 200, bottom: 155,
+      width: 145, height: 45, toJSON: () => ({})
+    });
+    vi.spyOn(secondBubble, "getBoundingClientRect").mockReturnValue({
+      x: 55, y: 165, left: 55, top: 165, right: 350, bottom: 210,
+      width: 295, height: 45, toJSON: () => ({})
+    });
+    vi.spyOn(first, "getBoundingClientRect").mockReturnValue({
+      x: 70, y: 120, left: 70, top: 120, right: 180, bottom: 145,
+      width: 110, height: 25, toJSON: () => ({})
+    });
+    vi.spyOn(second, "getBoundingClientRect").mockReturnValue({
+      x: 70, y: 175, left: 70, top: 175, right: 330, bottom: 200,
+      width: 260, height: 25, toJSON: () => ({})
+    });
+
+    expect(findIncomingMessages()).toHaveLength(2);
+  });
+
   it("excludes file cards", () => {
     const row = document.createElement("div");
     row.className = "message-row incoming";
