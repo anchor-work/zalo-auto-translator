@@ -16,6 +16,7 @@ import {
 import contentStyle from "./style.css?inline";
 
 const ROOT_ID = "zalo-auto-translator-root";
+const INCOMING_STYLE_ID = "zalo-auto-translator-incoming-style";
 
 function createButton(label: string, className = ""): HTMLButtonElement {
   const button = document.createElement("button");
@@ -29,7 +30,18 @@ export default defineContentScript({
   matches: ["https://chat.zalo.me/*"],
   runAt: "document_idle",
   main() {
-    if (document.getElementById(ROOT_ID)) return;
+    const extensionVersion = browser.runtime.getManifest().version;
+    const existingRoot = document.getElementById(ROOT_ID);
+    const existingPanel = existingRoot?.shadowRoot?.querySelector(".zat-panel");
+    if (
+      existingRoot?.dataset.extensionVersion === extensionVersion &&
+      existingRoot.dataset.status === "ready" &&
+      existingPanel
+    ) return;
+
+    existingRoot?.remove();
+    document.getElementById(INCOMING_STYLE_ID)?.remove();
+    document.querySelectorAll(".zat-incoming-overlay").forEach((element) => element.remove());
 
     let activeComposer: HTMLElement | null = null;
     let translatedSource = "";
@@ -43,6 +55,8 @@ export default defineContentScript({
 
     const host = document.createElement("div");
     host.id = ROOT_ID;
+    host.dataset.extensionVersion = extensionVersion;
+    host.dataset.status = "starting";
     const shadow = host.attachShadow({ mode: "open" });
     document.documentElement.append(host);
 
@@ -185,6 +199,7 @@ export default defineContentScript({
     );
     panel.append(header, body);
     shadow.append(panel);
+    host.dataset.status = "ui-ready";
 
     const setStatus = (message: string, kind?: "success" | "error") => {
       status.textContent = message;
@@ -485,7 +500,7 @@ export default defineContentScript({
     };
 
     const incomingStyle = document.createElement("style");
-    incomingStyle.id = "zalo-auto-translator-incoming-style";
+    incomingStyle.id = INCOMING_STYLE_ID;
     incomingStyle.textContent = `
       .zat-incoming-icon { all: initial !important; align-items: center !important; background: #fff !important; border: 1px solid #cad5e5 !important; border-radius: 50% !important; box-shadow: 0 2px 8px rgba(22, 34, 55, .16) !important; color: #607086 !important; cursor: pointer !important; display: flex !important; height: 28px !important; justify-content: center !important; padding: 0 !important; position: fixed !important; transition: background .15s, border-color .15s, color .15s, transform .15s !important; width: 28px !important; z-index: 2147483645 !important; }
       .zat-incoming-icon:hover { background: #2867e8 !important; border-color: #2867e8 !important; color: #fff !important; transform: scale(1.06) !important; }
@@ -655,6 +670,7 @@ export default defineContentScript({
     };
     document.addEventListener("scroll", repositionIncomingOverlays, true);
     window.addEventListener("resize", repositionIncomingOverlays);
+    host.dataset.status = "ready";
 
     const handleEnter = () => {
       const action = getEnterAction({
