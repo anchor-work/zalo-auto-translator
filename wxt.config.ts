@@ -14,9 +14,9 @@ export default defineConfig({
     };
 
     return {
-      name: "Zalo 한국어-베트남어 번역기",
-      description: "Zalo Web에서 보낼 메시지를 베트남어·영어로, 받은 메시지를 한국어로 번역합니다.",
-      version: "0.8.3",
+      name: "Zalo 다국어 메시지 번역기",
+      description: "Zalo Web에서 한국어·영어·베트남어 메시지를 작성하고 받은 메시지를 내 언어로 번역합니다.",
+      version: "0.9.0",
       permissions: ["storage"],
       host_permissions: development
         ? [
