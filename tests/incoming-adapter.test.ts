@@ -159,4 +159,37 @@ describe("incoming Zalo message adapter", () => {
       text: "xin quá haha"
     });
   });
+
+  it("finds message text inside a custom Zalo element through text nodes", () => {
+    const composer = document.createElement("div");
+    composer.contentEditable = "true";
+    document.body.append(composer);
+    vi.spyOn(composer, "getBoundingClientRect").mockReturnValue({
+      x: 20, y: 700, left: 20, top: 700, right: 1180, bottom: 750,
+      width: 1160, height: 50, toJSON: () => ({})
+    });
+
+    const bubble = document.createElement("section");
+    bubble.className = "opaque-bubble";
+    bubble.style.backgroundColor = "white";
+    bubble.style.borderRadius = "10px";
+    const customText = document.createElement("zalo-message-text");
+    customText.textContent = "okay nếu tôi có ý tưởng khác";
+    bubble.append(customText);
+    document.body.append(bubble);
+    const rect = {
+      x: 70, y: 120, left: 70, top: 120, right: 430, bottom: 180,
+      width: 360, height: 60, toJSON: () => ({})
+    };
+    vi.spyOn(bubble, "getBoundingClientRect").mockReturnValue(rect);
+    vi.spyOn(customText, "getBoundingClientRect").mockReturnValue(rect);
+
+    expect(findIncomingMessages()).toEqual([
+      {
+        container: bubble,
+        textElement: customText,
+        text: "okay nếu tôi có ý tưởng khác"
+      }
+    ]);
+  });
 });

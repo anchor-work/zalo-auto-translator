@@ -22,7 +22,8 @@ const MESSAGE_CONTAINER_SELECTOR = [
 const OUTGOING_HINT = /(^|[\s_-])(outgoing|sent|right|self|mine|owner|me)(?=$|[\s_-])/i;
 const INCOMING_HINT = /(^|[\s_-])(incoming|received|receive|left|friend|other)(?=$|[\s_-])/i;
 const FALLBACK_TAGS = "div, p, span";
-const NON_MESSAGE_TEXT = /^(?:\d{1,2}:\d{2}|\d{4}[./-]\d{1,2}[./-]\d{1,2}|hôm nay|today|yesterday|어제|오늘)$/i;
+const NON_MESSAGE_TEXT = /^(?:(?:\d{1,2}:\d{2})\s*)?(?:hôm nay|today|yesterday|어제|오늘)(?:\s*\d{1,2}:\d{2})?$|^(?:\d{1,2}:\d{2}|\d{4}[./-]\d{1,2}[./-]\d{1,2})$/i;
+const HAS_LETTER = /\p{L}/u;
 
 export interface IncomingMessageCandidate {
   container: HTMLElement;
@@ -137,7 +138,12 @@ function isIncoming(
 
 function hasDirectMessageText(element: HTMLElement): boolean {
   const text = normalizedText(element);
-  if (!text || text.length > 5_000 || NON_MESSAGE_TEXT.test(text)) return false;
+  if (
+    !text ||
+    text.length > 5_000 ||
+    NON_MESSAGE_TEXT.test(text) ||
+    !HAS_LETTER.test(text)
+  ) return false;
   if (!Array.from(element.childNodes).some((node) =>
     node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim())
   )) return false;
@@ -197,6 +203,18 @@ function candidateElements(root: ParentNode): HTMLElement[] {
   root.querySelectorAll<HTMLElement>(FALLBACK_TAGS).forEach((element) => {
     if (hasDirectMessageText(element)) candidates.add(element);
   });
+
+  const walker = document.createTreeWalker(root as Node, NodeFilter.SHOW_TEXT);
+  let textNode = walker.nextNode();
+  while (textNode) {
+    const parent = textNode.parentElement;
+    if (
+      parent &&
+      !parent.matches("script, style, noscript, svg, textarea, input") &&
+      hasDirectMessageText(parent)
+    ) candidates.add(parent);
+    textNode = walker.nextNode();
+  }
   return [...candidates];
 }
 
@@ -208,7 +226,7 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
   for (const textElement of candidateElements(root)) {
     if (
       textElement.closest("#zalo-auto-translator-root") ||
-      textElement.closest(".zat-incoming-tools") ||
+      textElement.closest(".zat-incoming-tools, .zat-incoming-overlay") ||
       textElement.closest('[contenteditable="true"], textarea, input, nav, aside') ||
       textElement.closest("[aria-hidden='true']")
     ) continue;
@@ -223,8 +241,8 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
       : false;
     const container = semanticHasDirection
       ? semanticContainer!
-      : visualContainer ?? semanticContainer ?? textElement;
-    if (seenContainers.has(container) || container.dataset.zatIncomingDecorated === "true") {
+      : visualContainer ?? textElement;
+    if (seenContainers.has(container)) {
       continue;
     }
 
@@ -233,6 +251,7 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
       !text ||
       text.length > 5_000 ||
       NON_MESSAGE_TEXT.test(text) ||
+      !HAS_LETTER.test(text) ||
       !isIncoming(container, textElement, bounds)
     ) continue;
 
@@ -262,6 +281,7 @@ export function resolveIncomingMessageFromTarget(
       text &&
       text.length <= 5_000 &&
       !NON_MESSAGE_TEXT.test(text) &&
+      HAS_LETTER.test(text) &&
       rect.width >= 20 &&
       rect.height >= 14 &&
       rect.bottom >= bounds.top &&
@@ -284,7 +304,7 @@ export function resolveIncomingMessageFromTarget(
     : false;
   const container = semanticHasDirection
     ? semanticContainer!
-    : visualContainer ?? semanticContainer ?? textElement;
+    : visualContainer ?? textElement;
   if (!isIncoming(container, textElement, bounds)) return null;
 
   const text = messageText(textElement);
