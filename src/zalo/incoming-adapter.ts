@@ -22,8 +22,27 @@ const MESSAGE_CONTAINER_SELECTOR = [
 const OUTGOING_HINT = /(^|[\s_-])(outgoing|sent|right|self|mine|owner|me)(?=$|[\s_-])/i;
 const INCOMING_HINT = /(^|[\s_-])(incoming|received|receive|left|friend|other)(?=$|[\s_-])/i;
 const FALLBACK_TAGS = "div, p, span";
-const NON_MESSAGE_TEXT = /^(?:(?:\d{1,2}:\d{2})\s*)?(?:hôm nay|today|yesterday|어제|오늘)(?:\s*\d{1,2}:\d{2})?$|^(?:\d{1,2}:\d{2}|\d{4}[./-]\d{1,2}[./-]\d{1,2})$/i;
+const NON_MESSAGE_TEXT = /^(?:(?:\d{1,2}:\d{2})\s*)?(?:hôm nay|hôm qua|today|yesterday|어제|오늘)(?:\s*\d{1,2}:\d{2})?$|^(?:\d{1,2}:\d{2}|\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?|\d{4}[./-]\d{1,2}[./-]\d{1,2})$/i;
 const HAS_LETTER = /\p{L}/u;
+const MENTION_ONLY = /^(?:@[\p{L}\p{N}_.-]+(?:\s+|$))+[.!?]?$/u;
+const URL_OR_EMAIL_ONLY = /^(?:(?:https?:\/\/|www\.)\S+|[\w.+-]+@[\w.-]+\.[a-z]{2,})$/i;
+const FILE_NAME = /\.(?:pdf|docx?|xlsx?|pptx?|txt|rtf|csv|zip|rar|7z|apk|exe)(?:\s|$)/i;
+const FILE_SIZE = /\b\d+(?:[.,]\d+)?\s*(?:bytes?|kb|mb|gb|tb)\b/i;
+const SYSTEM_TEXT = /^(?:\d+\s*(?:thành viên|members?|명)|đã thu hồi tin nhắn|message (?:was )?recalled|tin nhắn đã được thu hồi|cuộc gọi(?: nhỡ)?|missed call|đã tham gia nhóm|đã rời nhóm)$/i;
+const FILE_OR_MEDIA_HINT = /(^|[\s_-])(file|attachment|document|media|photo|image|video|audio|voice|sticker|gif|location|contact|poll)(?=$|[\s_-])/i;
+const META_HINT = /(^|[\s_-])(sender|author|username|user-name|display-name|profile-name|timestamp|time|date|meta|reaction|status|member-count|participant-count|link-preview|link-card|preview)(?=$|[\s_-])/i;
+const QUOTE_HINT = /(^|[\s_-])(quote|quoted|reply|replied|forward|forwarded)(?=$|[\s_-])/i;
+const MENTION_HINT = /(^|[\s_-])(mention|mentioned|tag|tagged)(?=$|[\s_-])/i;
+const PAGE_CHROME_SELECTOR = [
+  "header",
+  "[role='banner']",
+  "[role='navigation']",
+  "[role='toolbar']",
+  "[class*='conversation-header']",
+  "[class*='chat-header']",
+  "[class*='group-header']",
+  "[class*='thread-header']"
+].join(",");
 
 export interface IncomingMessageCandidate {
   container: HTMLElement;
@@ -36,13 +55,11 @@ export function incomingCandidateStillMatches(
 ): boolean {
   if (!candidate.container.isConnected) return false;
 
-  const textElementStillMatches =
-    candidate.textElement.isConnected &&
-    normalizedText(candidate.textElement).includes(candidate.text);
-  return (
-    textElementStillMatches ||
-    normalizedText(candidate.container).includes(candidate.text)
-  );
+  const currentText = normalizedText(candidate.container);
+  return candidate.text
+    .split("\n")
+    .filter(Boolean)
+    .every((line) => currentText.includes(line));
 }
 
 function normalizedText(element: HTMLElement): string {
@@ -76,6 +93,19 @@ function directionHints(container: HTMLElement): string {
     .join(" ");
 }
 
+function elementHints(element: HTMLElement): string {
+  return [
+    element.className,
+    element.id,
+    element.getAttribute("data-testid"),
+    element.getAttribute("data-type"),
+    element.getAttribute("role"),
+    element.getAttribute("aria-label")
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+}
+
 interface ConversationBounds {
   left: number;
   right: number;
@@ -100,7 +130,7 @@ function visibleComposerBounds(): ConversationBounds | null {
   return {
     left: Math.max(0, best.left - 24),
     right: Math.min(window.innerWidth, best.right + 24),
-    top: 48,
+    top: 80,
     bottom: Math.max(120, best.top - 8)
   };
 }
@@ -110,7 +140,7 @@ function conversationBounds(): ConversationBounds {
     visibleComposerBounds() ?? {
       left: 0,
       right: window.innerWidth,
-      top: 48,
+      top: 80,
       bottom: window.innerHeight * 0.9
     }
   );
@@ -189,6 +219,7 @@ function hasBubbleAppearance(element: HTMLElement): boolean {
 
 function visualBubbleFor(textElement: HTMLElement): HTMLElement | null {
   let current: HTMLElement | null = textElement;
+  let outermostBubble: HTMLElement | null = null;
   for (let depth = 0; current && depth < 6; depth += 1) {
     const rect = current.getBoundingClientRect();
     if (
@@ -196,10 +227,88 @@ function visualBubbleFor(textElement: HTMLElement): HTMLElement | null {
       rect.width > 40 &&
       rect.width <= window.innerWidth * 0.82 &&
       rect.height <= Math.max(360, window.innerHeight * 0.45)
-    ) return current;
+    ) outermostBubble = current;
     current = current.parentElement;
   }
-  return null;
+  return outermostBubble;
+}
+
+function hintsBetween(
+  element: HTMLElement,
+  boundary: HTMLElement,
+  pattern: RegExp
+): boolean {
+  let current: HTMLElement | null = element;
+  while (current && current !== boundary) {
+    if (pattern.test(elementHints(current))) return true;
+    current = current.parentElement;
+  }
+  return false;
+}
+
+function isInsideQuotedBlock(element: HTMLElement, boundary: HTMLElement): boolean {
+  let current: HTMLElement | null = element;
+  while (current && current !== boundary) {
+    if (QUOTE_HINT.test(elementHints(current))) return true;
+    const style = window.getComputedStyle(current);
+    if ((Number.parseFloat(style.borderLeftWidth) || 0) >= 2) return true;
+    current = current.parentElement;
+  }
+  return false;
+}
+
+function isFileOrMediaMessage(container: HTMLElement): boolean {
+  const text = normalizedText(container);
+  if (FILE_NAME.test(text) || FILE_SIZE.test(text)) return true;
+  if (FILE_OR_MEDIA_HINT.test(elementHints(container))) return true;
+  return Boolean(
+    container.querySelector(
+      "video, audio, object, embed, [download], [class*='attachment'], [class*='file-card'], [class*='file-message'], [class*='sticker'], [class*='voice-message']"
+    )
+  );
+}
+
+function looksLikeSenderName(
+  element: HTMLElement,
+  text: string,
+  otherElements: HTMLElement[]
+): boolean {
+  if (
+    text.length > 80 ||
+    text.includes("\n") ||
+    text.split(/\s+/).length > 7 ||
+    /[.!?,:;]$/.test(text)
+  ) return false;
+
+  const weight = window.getComputedStyle(element).fontWeight;
+  const isBold = weight === "bold" || (Number.parseInt(weight, 10) || 0) >= 600;
+  if (!isBold) return false;
+  const rect = element.getBoundingClientRect();
+  return otherElements.some((other) => {
+    const otherRect = other.getBoundingClientRect();
+    return otherRect.top >= rect.bottom - 2;
+  });
+}
+
+function usableBodyElement(
+  element: HTMLElement,
+  container: HTMLElement,
+  allElements: HTMLElement[]
+): boolean {
+  const text = messageText(element);
+  if (
+    !text ||
+    NON_MESSAGE_TEXT.test(text) ||
+    SYSTEM_TEXT.test(text) ||
+    MENTION_ONLY.test(text) ||
+    URL_OR_EMAIL_ONLY.test(text) ||
+    !HAS_LETTER.test(text)
+  ) return false;
+  if (hintsBetween(element, container, META_HINT)) return false;
+  if (hintsBetween(element, container, MENTION_HINT)) return false;
+  if (isInsideQuotedBlock(element, container)) return false;
+  if (looksLikeSenderName(element, text, allElements)) return false;
+  return true;
 }
 
 function candidateElements(root: ParentNode): HTMLElement[] {
@@ -233,8 +342,12 @@ function candidateElements(root: ParentNode): HTMLElement[] {
 }
 
 export function findIncomingMessages(root: ParentNode = document): IncomingMessageCandidate[] {
-  const results: IncomingMessageCandidate[] = [];
-  const seenContainers = new Set<HTMLElement>();
+  interface MessageGroup {
+    container: HTMLElement;
+    elements: Set<HTMLElement>;
+  }
+
+  const groups = new Map<HTMLElement, MessageGroup>();
   const bounds = conversationBounds();
 
   for (const textElement of candidateElements(root)) {
@@ -242,7 +355,18 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
       textElement.closest("#zalo-auto-translator-root") ||
       textElement.closest(".zat-incoming-tools, .zat-incoming-overlay") ||
       textElement.closest('[contenteditable="true"], textarea, input, nav, aside') ||
+      textElement.closest(PAGE_CHROME_SELECTOR) ||
       textElement.closest("[aria-hidden='true']")
+    ) continue;
+
+    const rawText = messageText(textElement);
+    if (
+      !rawText ||
+      rawText.length > 5_000 ||
+      NON_MESSAGE_TEXT.test(rawText) ||
+      SYSTEM_TEXT.test(rawText) ||
+      URL_OR_EMAIL_ONLY.test(rawText) ||
+      !HAS_LETTER.test(rawText)
     ) continue;
 
     const semanticContainer =
@@ -257,23 +381,54 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
       ? semanticContainer!
       : visualContainer ?? textElement;
     const container = visualContainer ?? directionContainer;
-    if (seenContainers.has(container)) {
-      continue;
-    }
-
-    const text = normalizedText(textElement);
+    const rect = container.getBoundingClientRect();
     if (
-      !text ||
-      text.length > 5_000 ||
-      NON_MESSAGE_TEXT.test(text) ||
-      !HAS_LETTER.test(text) ||
+      (rect.width > 0 && rect.height > 0 &&
+        (rect.bottom < bounds.top || rect.top > bounds.bottom)) ||
       !isIncoming(directionContainer, textElement, bounds)
     ) continue;
 
-    seenContainers.add(container);
-    results.push({ container, textElement, text });
+    const group = groups.get(container) ?? {
+      container,
+      elements: new Set<HTMLElement>()
+    };
+    group.elements.add(textElement);
+    groups.set(container, group);
   }
 
+  const results: IncomingMessageCandidate[] = [];
+  groups.forEach(({ container, elements }) => {
+    if (isFileOrMediaMessage(container)) return;
+
+    const allElements = [...elements];
+    const bodyElements = allElements
+      .filter((element) => usableBodyElement(element, container, allElements))
+      .filter(
+        (element) =>
+          !allElements.some(
+            (other) => other !== element && element.contains(other) &&
+              usableBodyElement(other, container, allElements)
+          )
+      )
+      .sort((left, right) => {
+        const position = left.compareDocumentPosition(right);
+        return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+      });
+
+    const parts: string[] = [];
+    bodyElements.forEach((element) => {
+      const text = messageText(element);
+      if (text && !parts.includes(text)) parts.push(text);
+    });
+    const text = parts.join("\n").trim();
+    if (!text || !HAS_LETTER.test(text)) return;
+
+    results.push({
+      container,
+      textElement: bodyElements.length === 1 ? bodyElements[0]! : container,
+      text
+    });
+  });
   return results;
 }
 
@@ -281,49 +436,11 @@ export function resolveIncomingMessageFromTarget(
   target: EventTarget | null
 ): IncomingMessageCandidate | null {
   if (!(target instanceof HTMLElement)) return null;
-  if (
-    target.closest("#zalo-auto-translator-root, .zat-incoming-tools, .zat-incoming-floating") ||
-    target.closest('[contenteditable="true"], textarea, input, nav, aside')
-  ) return null;
-
-  const bounds = conversationBounds();
-  let current: HTMLElement | null = target;
-  let textElement: HTMLElement | null = null;
-  for (let depth = 0; current && depth < 7; depth += 1) {
-    const text = messageText(current);
-    const rect = current.getBoundingClientRect();
-    if (
-      text &&
-      text.length <= 5_000 &&
-      !NON_MESSAGE_TEXT.test(text) &&
-      HAS_LETTER.test(text) &&
-      rect.width >= 20 &&
-      rect.height >= 14 &&
-      rect.bottom >= bounds.top &&
-      rect.top <= bounds.bottom
-    ) {
-      textElement = current;
-      break;
-    }
-    current = current.parentElement;
-  }
-  if (!textElement) return null;
-
-  const semanticContainer =
-    textElement.parentElement?.closest<HTMLElement>(MESSAGE_CONTAINER_SELECTOR) ?? null;
-  const visualContainer = visualBubbleFor(textElement);
-  const semanticHasDirection = semanticContainer
-    ? OUTGOING_HINT.test(directionHints(semanticContainer)) ||
-      INCOMING_HINT.test(directionHints(semanticContainer)) ||
-      semanticContainer.hasAttribute("data-from-me")
-    : false;
-  const directionContainer = semanticHasDirection
-    ? semanticContainer!
-    : visualContainer ?? textElement;
-  if (!isIncoming(directionContainer, textElement, bounds)) return null;
-  const container = visualContainer ?? directionContainer;
-
-  const text = messageText(textElement);
-  return text ? { container, textElement, text } : null;
+  return (
+    findIncomingMessages(document).find(
+      (candidate) =>
+        candidate.container === target || candidate.container.contains(target)
+    ) ?? null
+  );
 }
 

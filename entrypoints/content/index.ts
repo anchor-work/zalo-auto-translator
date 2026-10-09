@@ -519,7 +519,17 @@ export default defineContentScript({
     let openOverlay: IncomingOverlay | null = null;
     let repositionFrame: number | null = null;
 
-    const positionIncomingOverlay = (overlay: IncomingOverlay) => {
+    interface IconPlacement {
+      left: number;
+      right: number;
+      top: number;
+      bottom: number;
+    }
+
+    const positionIncomingOverlay = (
+      overlay: IncomingOverlay,
+      occupied: IconPlacement[]
+    ) => {
       const rect = overlay.candidate.container.getBoundingClientRect();
       const visible =
         rect.width > 0 &&
@@ -537,17 +547,40 @@ export default defineContentScript({
         spaceOnRight >= INCOMING_ICON_SIZE + INCOMING_ICON_GAP + 6
           ? rect.right + INCOMING_ICON_GAP
           : rect.left - INCOMING_ICON_SIZE - INCOMING_ICON_GAP;
-      overlay.button.style.left = `${Math.max(
+      const clampedLeft = Math.max(
         6,
         Math.min(iconLeft, window.innerWidth - INCOMING_ICON_SIZE - 6)
-      )}px`;
-      overlay.button.style.top = `${Math.max(
+      );
+      const idealTop = Math.max(
         6,
         Math.min(
           rect.top + Math.max(0, (rect.height - INCOMING_ICON_SIZE) / 2),
           window.innerHeight - INCOMING_ICON_SIZE - 6
         )
-      )}px`;
+      );
+      let iconTop = idealTop;
+      const overlaps = (top: number, placement: IconPlacement) =>
+        clampedLeft < placement.right + 4 &&
+        clampedLeft + INCOMING_ICON_SIZE + 4 > placement.left &&
+        top < placement.bottom + 4 &&
+        top + INCOMING_ICON_SIZE + 4 > placement.top;
+      for (let attempts = 0; attempts < occupied.length + 1; attempts += 1) {
+        const collision = occupied.find((placement) => overlaps(iconTop, placement));
+        if (!collision) break;
+        const below = collision.bottom + 4;
+        iconTop =
+          below <= window.innerHeight - INCOMING_ICON_SIZE - 6
+            ? below
+            : Math.max(6, collision.top - INCOMING_ICON_SIZE - 4);
+      }
+      overlay.button.style.left = `${clampedLeft}px`;
+      overlay.button.style.top = `${iconTop}px`;
+      occupied.push({
+        left: clampedLeft,
+        right: clampedLeft + INCOMING_ICON_SIZE,
+        top: iconTop,
+        bottom: iconTop + INCOMING_ICON_SIZE
+      });
 
       const cardWidth = Math.max(220, Math.min(440, rect.width));
       overlay.result.style.width = `${cardWidth}px`;
@@ -578,7 +611,14 @@ export default defineContentScript({
       if (repositionFrame !== null) return;
       repositionFrame = window.requestAnimationFrame(() => {
         repositionFrame = null;
-        incomingOverlays.forEach(positionIncomingOverlay);
+        const occupied: IconPlacement[] = [];
+        [...incomingOverlays.values()]
+          .sort(
+            (left, right) =>
+              left.candidate.container.getBoundingClientRect().top -
+              right.candidate.container.getBoundingClientRect().top
+          )
+          .forEach((overlay) => positionIncomingOverlay(overlay, occupied));
       });
     };
     const incomingResizeObserver = new ResizeObserver(repositionIncomingOverlays);
@@ -600,6 +640,7 @@ export default defineContentScript({
       result.className = "zat-incoming-overlay zat-incoming-card";
       result.hidden = true;
       result.title = "클릭하면 번역을 닫습니다.";
+      button.hidden = true;
       const overlay = { candidate, button, result };
       incomingLayer.append(button, result);
       incomingResizeObserver.observe(candidate.container);
@@ -616,10 +657,10 @@ export default defineContentScript({
           return;
         }
         closeOpenOverlay(overlay);
-        positionIncomingOverlay(overlay);
+        repositionIncomingOverlays();
         void translateIncomingMessage(overlay.candidate, button, result).then(() => {
           if (openOverlay !== overlay) result.hidden = true;
-          positionIncomingOverlay(overlay);
+          repositionIncomingOverlays();
         });
       });
       result.addEventListener("click", () => {
@@ -631,7 +672,7 @@ export default defineContentScript({
         closeOpenOverlay(overlay);
         void translateIncomingMessage(candidate, button, result).then(() => {
           if (openOverlay !== overlay) result.hidden = true;
-          positionIncomingOverlay(overlay);
+          repositionIncomingOverlays();
         });
       }
       return overlay;
@@ -659,7 +700,6 @@ export default defineContentScript({
           }
           overlay.candidate = candidate;
         }
-        positionIncomingOverlay(overlay);
       });
 
       incomingOverlays.forEach((overlay, container) => {
@@ -674,7 +714,7 @@ export default defineContentScript({
           // a visible message even though its DOM node and text are unchanged.
           // Keep that message's control alive instead of making it disappear.
           if (incomingCandidateStillMatches(overlay.candidate)) {
-            positionIncomingOverlay(overlay);
+            return;
           } else {
             incomingResizeObserver.unobserve(container);
             overlay.button.remove();
@@ -684,6 +724,7 @@ export default defineContentScript({
           }
         }
       });
+      repositionIncomingOverlays();
     };
 
     let incomingScanTimer: ReturnType<typeof setTimeout> | undefined;
