@@ -38,6 +38,15 @@ function normalizedText(element: HTMLElement): string {
     .trim();
 }
 
+function messageText(element: HTMLElement): string {
+  const lines = normalizedText(element)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  while (lines.length > 1 && NON_MESSAGE_TEXT.test(lines.at(-1) ?? "")) lines.pop();
+  return lines.join("\n").trim();
+}
+
 function directionHints(container: HTMLElement): string {
   return [
     container.className,
@@ -232,5 +241,53 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
   }
 
   return results;
+}
+
+export function resolveIncomingMessageFromTarget(
+  target: EventTarget | null
+): IncomingMessageCandidate | null {
+  if (!(target instanceof HTMLElement)) return null;
+  if (
+    target.closest("#zalo-auto-translator-root, .zat-incoming-tools, .zat-incoming-floating") ||
+    target.closest('[contenteditable="true"], textarea, input, nav, aside')
+  ) return null;
+
+  const bounds = conversationBounds();
+  let current: HTMLElement | null = target;
+  let textElement: HTMLElement | null = null;
+  for (let depth = 0; current && depth < 7; depth += 1) {
+    const text = messageText(current);
+    const rect = current.getBoundingClientRect();
+    if (
+      text &&
+      text.length <= 5_000 &&
+      !NON_MESSAGE_TEXT.test(text) &&
+      rect.width >= 20 &&
+      rect.height >= 14 &&
+      rect.bottom >= bounds.top &&
+      rect.top <= bounds.bottom
+    ) {
+      textElement = current;
+      break;
+    }
+    current = current.parentElement;
+  }
+  if (!textElement) return null;
+
+  const semanticContainer =
+    textElement.parentElement?.closest<HTMLElement>(MESSAGE_CONTAINER_SELECTOR) ?? null;
+  const visualContainer = visualBubbleFor(textElement);
+  const semanticHasDirection = semanticContainer
+    ? OUTGOING_HINT.test(directionHints(semanticContainer)) ||
+      INCOMING_HINT.test(directionHints(semanticContainer)) ||
+      semanticContainer.hasAttribute("data-from-me")
+    : false;
+  const container = semanticHasDirection
+    ? semanticContainer!
+    : visualContainer ?? semanticContainer ?? textElement;
+  if (!isIncoming(container, textElement, bounds)) return null;
+
+  const text = messageText(textElement);
+  return text ? { container, textElement, text } : null;
 }
 

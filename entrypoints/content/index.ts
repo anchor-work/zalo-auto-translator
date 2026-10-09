@@ -11,6 +11,7 @@ import type {
 import { findComposerFromFocus, sendComposer } from "../../src/zalo/dom-adapter";
 import {
   findIncomingMessages,
+  resolveIncomingMessageFromTarget,
   type IncomingMessageCandidate
 } from "../../src/zalo/incoming-adapter";
 import contentStyle from "./style.css?inline";
@@ -148,7 +149,7 @@ export default defineContentScript({
     incomingToggleLabel.append(incomingToggle, incomingToggleText);
     const incomingHint = document.createElement("small");
     incomingHint.className = "zat-hint";
-    incomingHint.textContent = "받은 메시지의 번역 버튼을 누르거나, 새 메시지만 자동으로 한국어 번역합니다.";
+    incomingHint.textContent = "상대방 말풍선에 마우스를 올려 번역하거나, 새 메시지만 자동으로 한국어 번역합니다.";
 
     const sourceActions = document.createElement("div");
     sourceActions.className = "zat-source-actions";
@@ -505,8 +506,104 @@ export default defineContentScript({
       .zat-incoming-translate:disabled { cursor: wait; opacity: .6; }
       .zat-incoming-result { background: #eef6ff; border-left: 3px solid #2867e8; border-radius: 6px; color: #172033; font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 7px 9px; white-space: pre-wrap; }
       .zat-incoming-result[data-state="error"] { background: #fff1f1; border-left-color: #c52a2a; color: #a12121; }
+      .zat-incoming-floating-button { all: initial !important; background: #2867e8 !important; border: 0 !important; border-radius: 999px !important; box-shadow: 0 4px 14px rgba(22, 34, 55, .24) !important; color: #fff !important; cursor: pointer !important; font: 700 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; padding: 7px 11px !important; position: fixed !important; z-index: 2147483646 !important; }
+      .zat-incoming-floating-button:disabled { cursor: wait !important; opacity: .7 !important; }
+      .zat-incoming-floating-result { all: initial !important; background: #eef6ff !important; border: 1px solid #b9d7ff !important; border-left: 4px solid #2867e8 !important; border-radius: 9px !important; box-shadow: 0 8px 24px rgba(22, 34, 55, .2) !important; box-sizing: border-box !important; color: #172033 !important; cursor: pointer !important; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; max-width: min(440px, calc(100vw - 24px)) !important; padding: 10px 12px !important; position: fixed !important; white-space: pre-wrap !important; z-index: 2147483646 !important; }
+      .zat-incoming-floating-result[data-state="error"] { background: #fff1f1 !important; border-color: #efb4b4 !important; border-left-color: #c52a2a !important; color: #a12121 !important; }
+      .zat-incoming-floating[hidden] { display: none !important; }
     `;
     document.head.append(incomingStyle);
+
+    const hoverTranslateButton = createButton(
+      "한국어 번역",
+      "zat-incoming-floating zat-incoming-floating-button"
+    );
+    const hoverTranslationResult = document.createElement("div");
+    hoverTranslationResult.className =
+      "zat-incoming-floating zat-incoming-floating-result";
+    hoverTranslateButton.hidden = true;
+    hoverTranslationResult.hidden = true;
+    hoverTranslationResult.title = "클릭하면 번역을 닫습니다.";
+    document.documentElement.append(hoverTranslateButton, hoverTranslationResult);
+
+    let hoveredIncoming: IncomingMessageCandidate | null = null;
+    let hoverHideTimer: ReturnType<typeof setTimeout> | undefined;
+    let hoverFrame: number | undefined;
+
+    const positionFloatingTranslation = (candidate: IncomingMessageCandidate) => {
+      const rect = candidate.container.getBoundingClientRect();
+      const buttonLeft = Math.max(8, Math.min(rect.left + 6, window.innerWidth - 112));
+      const buttonTop =
+        rect.bottom + 38 < window.innerHeight
+          ? rect.bottom + 4
+          : Math.max(8, rect.top - 34);
+      hoverTranslateButton.style.left = `${buttonLeft}px`;
+      hoverTranslateButton.style.top = `${buttonTop}px`;
+      hoverTranslationResult.style.left = `${buttonLeft}px`;
+      hoverTranslationResult.style.top = `${Math.max(
+        8,
+        Math.min(buttonTop + 36, window.innerHeight - 120)
+      )}px`;
+    };
+
+    const showFloatingTranslation = (candidate: IncomingMessageCandidate) => {
+      if (hoverHideTimer) clearTimeout(hoverHideTimer);
+      const changed =
+        hoveredIncoming?.container !== candidate.container ||
+        hoveredIncoming?.text !== candidate.text;
+      hoveredIncoming = candidate;
+      if (changed) {
+        hoverTranslationResult.hidden = true;
+        delete hoverTranslationResult.dataset.state;
+        hoverTranslateButton.textContent = incomingCache.has(candidate.text)
+          ? "번역 보기"
+          : "한국어 번역";
+      }
+      positionFloatingTranslation(candidate);
+      hoverTranslateButton.hidden = false;
+    };
+
+    document.addEventListener(
+      "pointermove",
+      (event) => {
+        if (hoverFrame) cancelAnimationFrame(hoverFrame);
+        const target = event.target;
+        hoverFrame = requestAnimationFrame(() => {
+          if (target instanceof Element && target.closest(".zat-incoming-floating")) {
+            if (hoverHideTimer) clearTimeout(hoverHideTimer);
+            return;
+          }
+          const candidate = resolveIncomingMessageFromTarget(target);
+          if (candidate) {
+            showFloatingTranslation(candidate);
+            return;
+          }
+          if (hoverHideTimer) clearTimeout(hoverHideTimer);
+          hoverHideTimer = setTimeout(() => {
+            hoverTranslateButton.hidden = true;
+          }, 350);
+        });
+      },
+      true
+    );
+
+    hoverTranslateButton.addEventListener("click", () => {
+      if (!hoveredIncoming) return;
+      positionFloatingTranslation(hoveredIncoming);
+      if (hoverTranslateButton.textContent === "다시 번역") {
+        incomingCache.delete(hoveredIncoming.text);
+      }
+      void translateIncomingMessage(
+        hoveredIncoming,
+        hoverTranslateButton,
+        hoverTranslationResult
+      ).then(() => {
+        if (hoveredIncoming) positionFloatingTranslation(hoveredIncoming);
+      });
+    });
+    hoverTranslationResult.addEventListener("click", () => {
+      hoverTranslationResult.hidden = true;
+    });
 
     let incomingScanTimer: ReturnType<typeof setTimeout> | undefined;
     const incomingObserver = new MutationObserver((mutations) => {

@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { findIncomingMessages } from "../src/zalo/incoming-adapter";
+import {
+  findIncomingMessages,
+  resolveIncomingMessageFromTarget
+} from "../src/zalo/incoming-adapter";
 
 describe("incoming Zalo message adapter", () => {
   beforeEach(() => {
@@ -120,5 +123,40 @@ describe("incoming Zalo message adapter", () => {
     expect(findIncomingMessages()).toEqual([
       { container: incoming, textElement: incoming, text: "Tôi có thể hiểu được." }
     ]);
+  });
+
+  it("resolves a hovered nested text element without relying on class names", () => {
+    const composer = document.createElement("div");
+    composer.contentEditable = "true";
+    document.body.append(composer);
+    vi.spyOn(composer, "getBoundingClientRect").mockReturnValue({
+      x: 20, y: 700, left: 20, top: 700, right: 1180, bottom: 750,
+      width: 1160, height: 50, toJSON: () => ({})
+    });
+
+    const bubble = document.createElement("div");
+    bubble.className = "opaque-a1";
+    bubble.style.backgroundColor = "white";
+    bubble.style.borderRadius = "10px";
+    const message = document.createElement("span");
+    message.textContent = "xin quá haha";
+    const time = document.createElement("span");
+    time.textContent = "16:42";
+    bubble.append(message, time);
+    document.body.append(bubble);
+    const bubbleRect = {
+      x: 70, y: 100, left: 70, top: 100, right: 300, bottom: 170,
+      width: 230, height: 70, toJSON: () => ({})
+    };
+    vi.spyOn(bubble, "getBoundingClientRect").mockReturnValue(bubbleRect);
+    vi.spyOn(message, "getBoundingClientRect").mockReturnValue({
+      ...bubbleRect, right: 270, bottom: 140, width: 200, height: 40
+    });
+
+    expect(resolveIncomingMessageFromTarget(message)).toMatchObject({
+      container: bubble,
+      textElement: message,
+      text: "xin quá haha"
+    });
   });
 });
