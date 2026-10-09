@@ -34,6 +34,33 @@ describe("incoming Zalo message adapter", () => {
     ]);
   });
 
+  it("uses the visual bubble as the overlay anchor when the semantic row is wider", () => {
+    const row = document.createElement("div");
+    row.className = "message-row incoming";
+    const bubble = document.createElement("div");
+    bubble.style.backgroundColor = "white";
+    bubble.style.borderRadius = "10px";
+    const text = document.createElement("span");
+    text.className = "message-text";
+    text.textContent = "Tôi đã nhận được nha";
+    bubble.append(text);
+    row.append(bubble);
+    document.body.append(row);
+
+    vi.spyOn(bubble, "getBoundingClientRect").mockReturnValue({
+      x: 70, y: 120, left: 70, top: 120, right: 370, bottom: 180,
+      width: 300, height: 60, toJSON: () => ({})
+    });
+    vi.spyOn(text, "getBoundingClientRect").mockReturnValue({
+      x: 82, y: 132, left: 82, top: 132, right: 350, bottom: 158,
+      width: 268, height: 26, toJSON: () => ({})
+    });
+
+    expect(findIncomingMessages()).toEqual([
+      { container: bubble, textElement: text, text: "Tôi đã nhận được nha" }
+    ]);
+  });
+
   it("uses conservative left-side geometry when direction metadata is absent", () => {
     const row = document.createElement("div");
     row.className = "message-row";

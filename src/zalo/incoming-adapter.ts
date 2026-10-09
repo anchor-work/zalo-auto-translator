@@ -253,9 +253,10 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
         INCOMING_HINT.test(directionHints(semanticContainer)) ||
         semanticContainer.hasAttribute("data-from-me")
       : false;
-    const container = semanticHasDirection
+    const directionContainer = semanticHasDirection
       ? semanticContainer!
       : visualContainer ?? textElement;
+    const container = visualContainer ?? directionContainer;
     if (seenContainers.has(container)) {
       continue;
     }
@@ -266,7 +267,7 @@ export function findIncomingMessages(root: ParentNode = document): IncomingMessa
       text.length > 5_000 ||
       NON_MESSAGE_TEXT.test(text) ||
       !HAS_LETTER.test(text) ||
-      !isIncoming(container, textElement, bounds)
+      !isIncoming(directionContainer, textElement, bounds)
     ) continue;
 
     seenContainers.add(container);
@@ -316,10 +317,11 @@ export function resolveIncomingMessageFromTarget(
       INCOMING_HINT.test(directionHints(semanticContainer)) ||
       semanticContainer.hasAttribute("data-from-me")
     : false;
-  const container = semanticHasDirection
+  const directionContainer = semanticHasDirection
     ? semanticContainer!
     : visualContainer ?? textElement;
-  if (!isIncoming(container, textElement, bounds)) return null;
+  if (!isIncoming(directionContainer, textElement, bounds)) return null;
+  const container = visualContainer ?? directionContainer;
 
   const text = messageText(textElement);
   return text ? { container, textElement, text } : null;

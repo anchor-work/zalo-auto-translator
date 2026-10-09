@@ -18,6 +18,8 @@ import contentStyle from "./style.css?inline";
 
 const ROOT_ID = "zalo-auto-translator-root";
 const INCOMING_STYLE_ID = "zalo-auto-translator-incoming-style";
+const INCOMING_ICON_SIZE = 30;
+const INCOMING_ICON_GAP = 8;
 
 function createButton(label: string, className = ""): HTMLButtonElement {
   const button = document.createElement("button");
@@ -199,7 +201,9 @@ export default defineContentScript({
       incomingHint
     );
     panel.append(header, body);
-    shadow.append(panel);
+    const incomingLayer = document.createElement("div");
+    incomingLayer.className = "zat-incoming-layer";
+    shadow.append(incomingLayer, panel);
     host.dataset.status = "ui-ready";
 
     const setStatus = (message: string, kind?: "success" | "error") => {
@@ -500,21 +504,6 @@ export default defineContentScript({
       }
     };
 
-    const incomingStyle = document.createElement("style");
-    incomingStyle.id = INCOMING_STYLE_ID;
-    incomingStyle.textContent = `
-      .zat-incoming-icon { all: initial !important; align-items: center !important; background: #fff !important; border: 1px solid #cad5e5 !important; border-radius: 50% !important; box-shadow: 0 2px 8px rgba(22, 34, 55, .16) !important; color: #607086 !important; cursor: pointer !important; display: flex !important; height: 28px !important; justify-content: center !important; padding: 0 !important; position: fixed !important; transition: background .15s, border-color .15s, color .15s, transform .15s !important; width: 28px !important; z-index: 2147483645 !important; }
-      .zat-incoming-icon:hover { background: #2867e8 !important; border-color: #2867e8 !important; color: #fff !important; transform: scale(1.06) !important; }
-      .zat-incoming-icon[data-state="translated"] { background: #eaf2ff !important; border-color: #8ab2f7 !important; color: #2867e8 !important; }
-      .zat-incoming-icon[data-state="loading"] { cursor: wait !important; opacity: .65 !important; }
-      .zat-incoming-icon svg { display: block !important; height: 17px !important; pointer-events: none !important; width: 17px !important; }
-      .zat-incoming-card { all: initial !important; background: #eef6ff !important; border: 1px solid #b9d7ff !important; border-left: 4px solid #2867e8 !important; border-radius: 9px !important; box-shadow: 0 8px 24px rgba(22, 34, 55, .2) !important; box-sizing: border-box !important; color: #172033 !important; cursor: pointer !important; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; max-height: 220px !important; max-width: min(440px, calc(100vw - 24px)) !important; overflow: auto !important; padding: 28px 12px 10px !important; position: fixed !important; white-space: pre-wrap !important; z-index: 2147483646 !important; }
-      .zat-incoming-card::before { color: #2867e8 !important; content: "한국어 번역 · 클릭하여 닫기" !important; font: 700 11px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; left: 12px !important; position: absolute !important; top: 9px !important; }
-      .zat-incoming-card[data-state="error"] { background: #fff1f1 !important; border-color: #efb4b4 !important; border-left-color: #c52a2a !important; color: #a12121 !important; }
-      .zat-incoming-overlay[hidden] { display: none !important; }
-    `;
-    document.head.append(incomingStyle);
-
     interface IncomingOverlay {
       candidate: IncomingMessageCandidate;
       button: HTMLButtonElement;
@@ -528,6 +517,7 @@ export default defineContentScript({
       </svg>`;
     const incomingOverlays = new Map<HTMLElement, IncomingOverlay>();
     let openOverlay: IncomingOverlay | null = null;
+    let repositionFrame: number | null = null;
 
     const positionIncomingOverlay = (overlay: IncomingOverlay) => {
       const rect = overlay.candidate.container.getBoundingClientRect();
@@ -542,13 +532,21 @@ export default defineContentScript({
         return;
       }
 
+      const spaceOnRight = window.innerWidth - rect.right;
+      const iconLeft =
+        spaceOnRight >= INCOMING_ICON_SIZE + INCOMING_ICON_GAP + 6
+          ? rect.right + INCOMING_ICON_GAP
+          : rect.left - INCOMING_ICON_SIZE - INCOMING_ICON_GAP;
       overlay.button.style.left = `${Math.max(
         6,
-        Math.min(rect.right + 7, window.innerWidth - 34)
+        Math.min(iconLeft, window.innerWidth - INCOMING_ICON_SIZE - 6)
       )}px`;
       overlay.button.style.top = `${Math.max(
         6,
-        Math.min(rect.top + Math.max(0, (rect.height - 28) / 2), window.innerHeight - 34)
+        Math.min(
+          rect.top + Math.max(0, (rect.height - INCOMING_ICON_SIZE) / 2),
+          window.innerHeight - INCOMING_ICON_SIZE - 6
+        )
       )}px`;
 
       const cardWidth = Math.max(220, Math.min(440, rect.width));
@@ -557,13 +555,33 @@ export default defineContentScript({
         8,
         Math.min(rect.left, window.innerWidth - cardWidth - 8)
       )}px`;
-      overlay.result.style.top = `${rect.bottom + 6}px`;
+      const availableBelow = window.innerHeight - rect.bottom - 14;
+      const availableAbove = rect.top - 14;
+      const showBelow = availableBelow >= 100 || availableBelow >= availableAbove;
+      const cardHeight = Math.min(
+        220,
+        Math.max(80, overlay.result.scrollHeight || 100),
+        Math.max(80, showBelow ? availableBelow : availableAbove)
+      );
+      overlay.result.style.top = `${Math.max(
+        8,
+        showBelow ? rect.bottom + 6 : rect.top - cardHeight - 6
+      )}px`;
       overlay.result.style.setProperty(
         "max-height",
-        `${Math.max(80, Math.min(220, window.innerHeight - rect.bottom - 14))}px`,
+        `${Math.max(80, Math.min(220, showBelow ? availableBelow : availableAbove))}px`,
         "important"
       );
     };
+
+    const repositionIncomingOverlays = () => {
+      if (repositionFrame !== null) return;
+      repositionFrame = window.requestAnimationFrame(() => {
+        repositionFrame = null;
+        incomingOverlays.forEach(positionIncomingOverlay);
+      });
+    };
+    const incomingResizeObserver = new ResizeObserver(repositionIncomingOverlays);
 
     const closeOpenOverlay = (except?: IncomingOverlay) => {
       if (openOverlay && openOverlay !== except) openOverlay.result.hidden = true;
@@ -583,7 +601,8 @@ export default defineContentScript({
       result.hidden = true;
       result.title = "클릭하면 번역을 닫습니다.";
       const overlay = { candidate, button, result };
-      document.documentElement.append(button, result);
+      incomingLayer.append(button, result);
+      incomingResizeObserver.observe(candidate.container);
 
       button.addEventListener("click", () => {
         if (!result.hidden) {
@@ -645,6 +664,7 @@ export default defineContentScript({
 
       incomingOverlays.forEach((overlay, container) => {
         if (!document.contains(container)) {
+          incomingResizeObserver.unobserve(container);
           overlay.button.remove();
           overlay.result.remove();
           incomingOverlays.delete(container);
@@ -656,6 +676,7 @@ export default defineContentScript({
           if (incomingCandidateStillMatches(overlay.candidate)) {
             positionIncomingOverlay(overlay);
           } else {
+            incomingResizeObserver.unobserve(container);
             overlay.button.remove();
             overlay.result.remove();
             incomingOverlays.delete(container);
@@ -675,9 +696,6 @@ export default defineContentScript({
     incomingObserver.observe(document.body, { childList: true, subtree: true });
     setTimeout(() => syncIncomingOverlays(false), 700);
     setInterval(() => syncIncomingOverlays(false), 1_500);
-    const repositionIncomingOverlays = () => {
-      incomingOverlays.forEach(positionIncomingOverlay);
-    };
     document.addEventListener("scroll", repositionIncomingOverlays, true);
     window.addEventListener("resize", repositionIncomingOverlays);
     host.dataset.status = "ready";
