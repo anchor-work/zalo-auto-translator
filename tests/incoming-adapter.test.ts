@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   findIncomingMessages,
+  incomingCandidateStillMatches,
   resolveIncomingMessageFromTarget
 } from "../src/zalo/incoming-adapter";
 
@@ -191,5 +192,26 @@ describe("incoming Zalo message adapter", () => {
         text: "okay nếu tôi có ý tưởng khác"
       }
     ]);
+  });
+
+  it("keeps a previously detected message while its original text remains", () => {
+    const bubble = document.createElement("div");
+    const message = document.createElement("span");
+    message.textContent = "xin quá haha";
+    bubble.append(message);
+    document.body.append(bubble);
+
+    const candidate = {
+      container: bubble,
+      textElement: message,
+      text: "xin quá haha"
+    };
+    expect(incomingCandidateStillMatches(candidate)).toBe(true);
+
+    message.textContent = "virtualized replacement message";
+    expect(incomingCandidateStillMatches(candidate)).toBe(false);
+
+    bubble.remove();
+    expect(incomingCandidateStillMatches(candidate)).toBe(false);
   });
 });

@@ -11,6 +11,7 @@ import type {
 import { findComposerFromFocus, sendComposer } from "../../src/zalo/dom-adapter";
 import {
   findIncomingMessages,
+  incomingCandidateStillMatches,
   type IncomingMessageCandidate
 } from "../../src/zalo/incoming-adapter";
 import contentStyle from "./style.css?inline";
@@ -649,8 +650,17 @@ export default defineContentScript({
           incomingOverlays.delete(container);
           if (openOverlay === overlay) openOverlay = null;
         } else if (!seen.has(container)) {
-          overlay.button.hidden = true;
-          overlay.result.hidden = true;
+          // Zalo virtualizes its chat list. A periodic scan can temporarily omit
+          // a visible message even though its DOM node and text are unchanged.
+          // Keep that message's control alive instead of making it disappear.
+          if (incomingCandidateStillMatches(overlay.candidate)) {
+            positionIncomingOverlay(overlay);
+          } else {
+            overlay.button.remove();
+            overlay.result.remove();
+            incomingOverlays.delete(container);
+            if (openOverlay === overlay) openOverlay = null;
+          }
         }
       });
     };

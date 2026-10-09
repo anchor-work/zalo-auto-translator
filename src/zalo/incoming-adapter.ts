@@ -31,6 +31,20 @@ export interface IncomingMessageCandidate {
   text: string;
 }
 
+export function incomingCandidateStillMatches(
+  candidate: IncomingMessageCandidate
+): boolean {
+  if (!candidate.container.isConnected) return false;
+
+  const textElementStillMatches =
+    candidate.textElement.isConnected &&
+    normalizedText(candidate.textElement).includes(candidate.text);
+  return (
+    textElementStillMatches ||
+    normalizedText(candidate.container).includes(candidate.text)
+  );
+}
+
 function normalizedText(element: HTMLElement): string {
   return (element.innerText || element.textContent || "")
     .replace(/\u00a0/g, " ")
