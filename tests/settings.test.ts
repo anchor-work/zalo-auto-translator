@@ -1,5 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { validateApiBaseUrl } from "../src/settings";
+import { normalizeSettings, validateApiBaseUrl } from "../src/settings";
+
+describe("settings migration", () => {
+  it("migrates existing users to Korean without losing their preferences", () => {
+    const settings = normalizeSettings({
+      schemaVersion: 4 as never,
+      enabled: false,
+      tone: "friendly",
+      outgoingTargetLanguage: "en"
+    });
+    expect(settings).toMatchObject({
+      schemaVersion: 5,
+      enabled: false,
+      userLanguage: "ko",
+      languageSetupCompleted: false,
+      tone: "friendly",
+      outgoingTargetLanguage: "en",
+      conversationLanguageOverrides: {}
+    });
+  });
+
+  it("prevents the source and target languages from being identical", () => {
+    expect(normalizeSettings({ userLanguage: "vi", outgoingTargetLanguage: "vi" }))
+      .toMatchObject({ userLanguage: "vi", outgoingTargetLanguage: "ko" });
+  });
+});
 
 describe("translation API URL validation", () => {
   it("accepts local development URLs", () => {

@@ -21,12 +21,15 @@ export type VietnameseAddress =
   | "customer";
 
 export interface ExtensionSettings {
-  schemaVersion: 4;
+  schemaVersion: 5;
   enabled: boolean;
+  userLanguage: TranslationLanguage;
+  languageSetupCompleted: boolean;
   tone: TranslationTone;
   vietnameseAddress: VietnameseAddress;
-  outgoingTargetLanguage: "vi" | "en";
+  outgoingTargetLanguage: TranslationLanguage;
   autoTranslateIncoming: boolean;
+  conversationLanguageOverrides: Record<string, TranslationSourceLanguage>;
   mode: TranslationMode;
   localApiBaseUrl: string;
 }

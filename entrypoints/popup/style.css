@@ -3,6 +3,10 @@
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   width: 340px;
@@ -12,6 +16,33 @@ main {
   display: grid;
   gap: 14px;
   padding: 18px;
+}
+
+section.settings {
+  display: grid;
+  gap: 14px;
+}
+
+.onboarding {
+  background: linear-gradient(145deg, #f5f9ff, #eef4ff);
+  border: 1px solid #d8e5fb;
+  border-radius: 14px;
+  display: grid;
+  gap: 13px;
+  padding: 16px;
+}
+
+.welcome-mark {
+  align-items: center;
+  background: #2867e8;
+  border-radius: 12px;
+  color: #fff;
+  display: flex;
+  font-size: 16px;
+  font-weight: 800;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
 }
 
 h1,
@@ -56,6 +87,10 @@ select {
   font: inherit;
   padding: 9px;
   width: 100%;
+}
+
+select {
+  background: #fff;
 }
 
 .toggle input {

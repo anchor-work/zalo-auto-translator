@@ -23,7 +23,7 @@ export default defineBackground(() => {
 
         if (message.type === "save-settings") {
           await saveSettings(message.payload);
-          return { ok: true, data: message.payload };
+          return { ok: true, data: await getSettings() };
         }
 
         if (message.type === "get-usage") {

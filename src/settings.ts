@@ -6,31 +6,56 @@ export const PRODUCTION_API_BASE_URL =
   "https://zalo-translator-api-s6bip5vp3a-du.a.run.app";
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   enabled: true,
+  userLanguage: "ko",
+  languageSetupCompleted: false,
   tone: "natural",
   vietnameseAddress: "neutral",
   outgoingTargetLanguage: "vi",
   autoTranslateIncoming: false,
+  conversationLanguageOverrides: {},
   mode: "local-api",
   localApiBaseUrl: PRODUCTION_API_BASE_URL
 };
 
+const LANGUAGES = new Set(["ko", "en", "vi"]);
+
+export function normalizeSettings(
+  value?: Partial<ExtensionSettings>
+): ExtensionSettings {
+  const userLanguage = LANGUAGES.has(value?.userLanguage ?? "")
+    ? value!.userLanguage!
+    : DEFAULT_SETTINGS.userLanguage;
+  let outgoingTargetLanguage = LANGUAGES.has(value?.outgoingTargetLanguage ?? "")
+    ? value!.outgoingTargetLanguage!
+    : DEFAULT_SETTINGS.outgoingTargetLanguage;
+  if (outgoingTargetLanguage === userLanguage) {
+    outgoingTargetLanguage = userLanguage === "vi" ? "ko" : "vi";
+  }
+
+  return {
+    ...DEFAULT_SETTINGS,
+    ...value,
+    schemaVersion: 5,
+    userLanguage,
+    outgoingTargetLanguage,
+    conversationLanguageOverrides:
+      value?.conversationLanguageOverrides &&
+      typeof value.conversationLanguageOverrides === "object"
+        ? value.conversationLanguageOverrides
+        : {}
+  };
+}
+
 export async function getSettings(): Promise<ExtensionSettings> {
   const stored = await browser.storage.local.get(SETTINGS_KEY);
   const value = stored[SETTINGS_KEY] as Partial<ExtensionSettings> | undefined;
-  if (value && value.schemaVersion !== 4) {
-    return {
-      ...DEFAULT_SETTINGS,
-      enabled: value.enabled ?? DEFAULT_SETTINGS.enabled,
-      tone: value.tone ?? DEFAULT_SETTINGS.tone
-    };
-  }
-  return { ...DEFAULT_SETTINGS, ...value };
+  return normalizeSettings(value);
 }
 
 export async function saveSettings(settings: ExtensionSettings): Promise<void> {
-  await browser.storage.local.set({ [SETTINGS_KEY]: settings });
+  await browser.storage.local.set({ [SETTINGS_KEY]: normalizeSettings(settings) });
 }
 
 export function validateApiBaseUrl(value: string): string {

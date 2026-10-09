@@ -156,7 +156,7 @@ button:disabled {
 
 .zat-preview.zat-stale::before {
   color: #9a6700;
-  content: "번역 조건이 변경되었습니다. 다시 번역해 주세요.";
+  content: var(--zat-stale-message, "Translation options changed.");
   font-size: 11px;
 }
 
@@ -244,7 +244,7 @@ button:disabled {
 
 .zat-incoming-card::before {
   color: #2867e8;
-  content: "한국어 번역 · 클릭하여 닫기";
+  content: var(--zat-incoming-title, "Translation · Click to close");
   font: 700 11px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   left: 12px;
   position: absolute;
