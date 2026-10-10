@@ -1,12 +1,23 @@
 import { browser } from "wxt/browser";
 import { getEnterAction, type ComposeOperation } from "../../src/compose-flow";
-import { addressName, languageName, toneName, uiText } from "../../src/i18n";
+import { languageName, toneName, uiText } from "../../src/i18n";
 import { incomingTranslationDecision } from "../../src/language";
 import { DEFAULT_SETTINGS } from "../../src/settings";
+import {
+  defaultConversationProfile,
+  incomingSocialContext,
+  outgoingSocialContext,
+  vietnameseAddressExample,
+  vietnameseAddressForProfile
+} from "../../src/conversation-profile";
 import type {
   BackgroundMessage,
   BackgroundResponse,
+  ConversationProfile,
+  ConversationRelationship,
   ExtensionSettings,
+  ParticipantGender,
+  RelativeAge,
   TranslationLanguage,
   TranslationResult,
   TranslationSourceLanguage,
@@ -23,8 +34,8 @@ import contentStyle from "./style.css?inline";
 
 const ROOT_ID = "zalo-auto-translator-root";
 const INCOMING_STYLE_ID = "zalo-auto-translator-incoming-style";
-const INCOMING_ICON_SIZE = 30;
-const INCOMING_ICON_GAP = 8;
+const INCOMING_ICON_SIZE = 28;
+const INCOMING_ICON_GAP = 7;
 
 function createButton(label: string, className = ""): HTMLButtonElement {
   const button = document.createElement("button");
@@ -71,6 +82,9 @@ export default defineContentScript({
     const t = (key: Parameters<typeof uiText>[1], variables?: Record<string, string | number>) =>
       uiText(uiLanguage, key, variables);
     const incomingCache = new Map<string, string>();
+    let activeProfile = defaultConversationProfile(currentSettings);
+    let currentConversationKey = "";
+    let conversationSettingsEditing = false;
 
     const host = document.createElement("div");
     host.id = ROOT_ID;
@@ -89,11 +103,18 @@ export default defineContentScript({
 
     const header = document.createElement("div");
     header.className = "zat-header";
+    header.title = t("dragPanel");
     const title = document.createElement("strong");
     title.textContent = t("panelTitle");
+    const headerActions = document.createElement("div");
+    headerActions.className = "zat-header-actions";
+    const resetPositionButton = createButton("↺", "zat-icon-button zat-position-reset");
+    resetPositionButton.setAttribute("aria-label", t("resetPanelPosition"));
+    resetPositionButton.title = t("resetPanelPosition");
     const collapseButton = createButton("−", "zat-icon-button");
     collapseButton.setAttribute("aria-label", t("collapse"));
-    header.append(title, collapseButton);
+    headerActions.append(resetPositionButton, collapseButton);
+    header.append(title, headerActions);
 
     const body = document.createElement("div");
     body.className = "zat-body";
@@ -145,17 +166,54 @@ export default defineContentScript({
     });
     conversationLanguageLabel.append(conversationLanguageSelect);
 
-    const addressLabel = document.createElement("label");
-    addressLabel.textContent = t("vietnameseAddress");
-    const addressSelect = document.createElement("select");
-    const addresses: VietnameseAddress[] = ["neutral", "older_male", "older_female", "younger_from_male", "younger_from_female", "same_age", "much_older_male", "much_older_female", "customer"];
-    addresses.forEach((value) => {
+    const relationshipLabel = document.createElement("label");
+    relationshipLabel.textContent = t("relationship");
+    const relationshipSelect = document.createElement("select");
+    const relationships: Array<[ConversationRelationship, Parameters<typeof uiText>[1]]> = [
+      ["unknown", "relationshipUnknown"],
+      ["friend", "relationshipFriend"],
+      ["coworker", "relationshipCoworker"],
+      ["customer", "relationshipCustomer"],
+      ["group", "relationshipGroup"]
+    ];
+    relationships.forEach(([value, key]) => {
       const option = document.createElement("option");
       option.value = value;
-      option.textContent = addressName(uiLanguage, value);
-      addressSelect.append(option);
+      option.textContent = t(key);
+      relationshipSelect.append(option);
     });
-    addressLabel.append(addressSelect);
+    relationshipLabel.append(relationshipSelect);
+
+    const relativeAgeLabel = document.createElement("label");
+    relativeAgeLabel.textContent = t("relativeAge");
+    const relativeAgeSelect = document.createElement("select");
+    const ages: Array<[RelativeAge, Parameters<typeof uiText>[1]]> = [
+      ["unknown", "ageUnknown"], ["older", "ageOlder"], ["same", "ageSame"], ["younger", "ageYounger"]
+    ];
+    ages.forEach(([value, key]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = t(key);
+      relativeAgeSelect.append(option);
+    });
+    relativeAgeLabel.append(relativeAgeSelect);
+
+    const recipientGenderLabel = document.createElement("label");
+    recipientGenderLabel.textContent = t("recipientGender");
+    const recipientGenderSelect = document.createElement("select");
+    const recipientGenders: Array<[ParticipantGender, Parameters<typeof uiText>[1]]> = [
+      ["unknown", "genderUnknown"], ["male", "male"], ["female", "female"]
+    ];
+    recipientGenders.forEach(([value, key]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = t(key);
+      recipientGenderSelect.append(option);
+    });
+    recipientGenderLabel.append(recipientGenderSelect);
+
+    const addressRecommendation = document.createElement("small");
+    addressRecommendation.className = "zat-address-recommendation";
 
     const toneLabel = document.createElement("label");
     toneLabel.textContent = t("tone");
@@ -168,6 +226,37 @@ export default defineContentScript({
       toneSelect.append(option);
     });
     toneLabel.append(toneSelect);
+
+    const conversationSettingsHeader = document.createElement("button");
+    conversationSettingsHeader.type = "button";
+    conversationSettingsHeader.className = "zat-conversation-summary zat-hidden";
+    const conversationSummaryText = document.createElement("span");
+    const conversationEditText = document.createElement("span");
+    conversationEditText.className = "zat-summary-edit";
+    conversationEditText.textContent = "✎";
+    conversationSettingsHeader.setAttribute("aria-label", t("editConversationSettings"));
+    conversationSettingsHeader.append(conversationSummaryText, conversationEditText);
+
+    const conversationSettings = document.createElement("section");
+    conversationSettings.className = "zat-conversation-settings";
+    const conversationSettingsTitle = document.createElement("strong");
+    conversationSettingsTitle.textContent = t("conversationSettings");
+    const conversationSettingsActions = document.createElement("div");
+    conversationSettingsActions.className = "zat-settings-actions";
+    const resetConversationButton = createButton(t("resetConversationSettings"), "zat-secondary");
+    const doneConversationButton = createButton(t("conversationSettingsDone"), "zat-primary");
+    conversationSettingsActions.append(resetConversationButton, doneConversationButton);
+    conversationSettings.append(
+      conversationSettingsTitle,
+      targetLabel,
+      conversationLanguageLabel,
+      relationshipLabel,
+      relativeAgeLabel,
+      recipientGenderLabel,
+      addressRecommendation,
+      toneLabel,
+      conversationSettingsActions
+    );
 
     const incomingToggleLabel = document.createElement("label");
     incomingToggleLabel.className = "zat-toggle zat-incoming-toggle";
@@ -205,10 +294,8 @@ export default defineContentScript({
     body.append(
       status,
       sourceLabel,
-      targetLabel,
-      conversationLanguageLabel,
-      addressLabel,
-      toneLabel,
+      conversationSettingsHeader,
+      conversationSettings,
       sourceActions,
       preview,
       incomingToggleLabel,
@@ -230,11 +317,14 @@ export default defineContentScript({
       status.className = `zat-status${kind ? ` zat-${kind}` : ""}`;
     };
 
+    const currentAddress = (): VietnameseAddress =>
+      vietnameseAddressForProfile(activeProfile, currentSettings.userGender);
+
     const previewIsCurrent = () =>
       Boolean(previewText.value.trim()) &&
       translatedSource === sourceText.value.trim() &&
       translatedTone === toneSelect.value &&
-      translatedAddress === addressSelect.value &&
+      translatedAddress === currentAddress() &&
       translatedTarget === targetSelect.value;
 
     const targetLanguageName = () =>
@@ -247,8 +337,11 @@ export default defineContentScript({
 
       sourceText.disabled = sending;
       toneSelect.disabled = operation !== "idle";
-      addressSelect.disabled = operation !== "idle";
+      relationshipSelect.disabled = operation !== "idle";
+      relativeAgeSelect.disabled = operation !== "idle";
+      recipientGenderSelect.disabled = operation !== "idle";
       targetSelect.disabled = operation !== "idle";
+      conversationLanguageSelect.disabled = operation !== "idle";
       previewText.disabled = sending;
       translateButton.disabled = operation !== "idle" || !hasSource;
       sendButton.disabled = operation !== "idle" || !ready;
@@ -261,7 +354,17 @@ export default defineContentScript({
           : ready
             ? t("translateAgain")
             : t("translateTo", { language: targetLanguageName() });
-      addressLabel.hidden = targetSelect.value !== "vi";
+      const showVietnameseRelationship = targetSelect.value === "vi";
+      relationshipLabel.hidden = !showVietnameseRelationship;
+      const relationshipNeedsDetails = !new Set(["customer", "group"]).has(relationshipSelect.value);
+      relativeAgeLabel.hidden = !showVietnameseRelationship || !relationshipNeedsDetails;
+      recipientGenderLabel.hidden = !showVietnameseRelationship || !relationshipNeedsDetails;
+      addressRecommendation.hidden = !showVietnameseRelationship;
+      addressRecommendation.textContent = t("addressRecommendation", {
+        address: activeProfile.relationship === "group"
+          ? "tôi → mọi người"
+          : vietnameseAddressExample(currentAddress())
+      });
       sendButton.textContent = operation === "sending" ? t("sending") : t("sendToZalo");
       keyboardHint.textContent =
         operation === "translating"
@@ -349,7 +452,7 @@ export default defineContentScript({
       if (operation !== "idle") return;
       const text = sourceText.value.trim();
       const tone = toneSelect.value as TranslationTone;
-      const vietnameseAddress = addressSelect.value as VietnameseAddress;
+      const vietnameseAddress = currentAddress();
       const targetLanguage = targetSelect.value as TranslationLanguage;
       if (!text) {
         setStatus(t("inputRequired"), "error");
@@ -369,7 +472,8 @@ export default defineContentScript({
           sourceLanguage: currentSettings.userLanguage,
           targetLanguage,
           tone,
-          vietnameseAddress
+          vietnameseAddress,
+          socialContext: outgoingSocialContext(activeProfile, currentSettings.userGender)
         }
       };
 
@@ -382,7 +486,7 @@ export default defineContentScript({
           sequence !== requestSequence ||
           sourceText.value.trim() !== text ||
           toneSelect.value !== tone ||
-          addressSelect.value !== vietnameseAddress ||
+          currentAddress() !== vietnameseAddress ||
           targetSelect.value !== targetLanguage
         ) {
           return;
@@ -461,12 +565,38 @@ export default defineContentScript({
       if (!response.ok) throw new Error(response.error);
     };
 
+    const clampPanelPosition = (left: number, top: number) => {
+      const rect = panel.getBoundingClientRect();
+      return {
+        left: Math.max(8, Math.min(left, window.innerWidth - rect.width - 8)),
+        top: Math.max(8, Math.min(top, window.innerHeight - Math.min(rect.height, window.innerHeight - 16) - 8))
+      };
+    };
+
+    const applyPanelPosition = (left: number, top: number) => {
+      const position = clampPanelPosition(left, top);
+      panel.style.left = `${position.left}px`;
+      panel.style.top = `${position.top}px`;
+      panel.style.right = "auto";
+      panel.style.bottom = "auto";
+      return position;
+    };
+
+    const restorePanelPosition = () => {
+      if (currentSettings.panelPosition) {
+        applyPanelPosition(
+          currentSettings.panelPosition.left,
+          currentSettings.panelPosition.top
+        );
+      }
+    };
+
     const translateIncomingMessage = async (
       overlay: IncomingOverlay
     ): Promise<void> => {
       const { candidate, button, result } = overlay;
       if (button.disabled) return;
-      const cacheKey = `${currentSettings.userLanguage}:${candidate.text}`;
+      const cacheKey = `${currentConversationKey}:${currentSettings.userLanguage}:${activeProfile.relationship}:${activeProfile.relativeAge}:${activeProfile.recipientGender}:${candidate.text}`;
       const cached = incomingCache.get(cacheKey);
       if (cached) {
         delete result.dataset.state;
@@ -490,7 +620,8 @@ export default defineContentScript({
           sourceLanguage: overlay.sourceLanguage,
           targetLanguage: currentSettings.userLanguage,
           tone: "natural",
-          vietnameseAddress: "neutral"
+          vietnameseAddress: "neutral",
+          socialContext: incomingSocialContext(activeProfile, currentSettings.userGender)
         }
       };
 
@@ -668,7 +799,8 @@ export default defineContentScript({
         if (!result.hidden) {
           result.hidden = true;
           if (openOverlay === overlay) openOverlay = null;
-          button.dataset.state = incomingCache.has(`${currentSettings.userLanguage}:${overlay.candidate.text}`)
+          const cacheKey = `${currentConversationKey}:${currentSettings.userLanguage}:${activeProfile.relationship}:${activeProfile.relativeAge}:${activeProfile.recipientGender}:${overlay.candidate.text}`;
+          button.dataset.state = incomingCache.has(cacheKey)
             ? "translated"
             : "";
           button.setAttribute("aria-label", t("incomingTranslate", { language: languageName(uiLanguage, uiLanguage) }));
@@ -713,10 +845,89 @@ export default defineContentScript({
       return `chat:${(hash >>> 0).toString(36)}`;
     };
 
+    const activeConversationLooksLikeGroup = (): boolean => {
+      const qid = document
+        .querySelector<HTMLElement>('[data-component="message-content-view"][data-qid]')
+        ?.dataset.qid;
+      const conversationId = qid?.split("_").at(-1) ?? "";
+      if (/^g\d+/i.test(conversationId)) return true;
+      const headerText = Array.from(
+        document.querySelectorAll<HTMLElement>("header, [class*='conversation-header'], [class*='chat-header']")
+      )
+        .map((element) => element.innerText)
+        .join(" ");
+      return /\b\d+\s*(?:thành viên|members?|명)\b/i.test(headerText);
+    };
+
+    const relationshipText = (value: ConversationRelationship): string => {
+      const item = relationships.find(([candidate]) => candidate === value);
+      return item ? t(item[1]) : t("relationshipUnknown");
+    };
+
+    const setConversationSettingsCollapsed = (collapsed: boolean) => {
+      conversationSettings.classList.toggle("zat-hidden", collapsed);
+      conversationSettingsHeader.classList.toggle("zat-hidden", !collapsed);
+      requestAnimationFrame(() => {
+        const rect = panel.getBoundingClientRect();
+        applyPanelPosition(rect.left, rect.top);
+      });
+    };
+
+    const renderConversationProfile = () => {
+      targetSelect.value = activeProfile.targetLanguage;
+      conversationLanguageSelect.value = activeProfile.incomingLanguage;
+      toneSelect.value = activeProfile.tone;
+      relationshipSelect.value = activeProfile.relationship;
+      relativeAgeSelect.value = activeProfile.relativeAge;
+      recipientGenderSelect.value = activeProfile.recipientGender;
+      conversationSummaryText.textContent = [
+        languageName(uiLanguage, activeProfile.targetLanguage),
+        toneName(uiLanguage, activeProfile.tone),
+        relationshipText(activeProfile.relationship)
+      ].join(" · ");
+      setConversationSettingsCollapsed(activeProfile.configured && !conversationSettingsEditing);
+      refreshControls();
+    };
+
+    const syncConversationProfile = () => {
+      const key = activeConversationKey();
+      if (key === currentConversationKey) return;
+      currentConversationKey = key;
+      conversationSettingsEditing = false;
+      const fallback = defaultConversationProfile(currentSettings);
+      const stored = currentSettings.conversationProfiles[key];
+      if (!stored && activeConversationLooksLikeGroup()) fallback.relationship = "group";
+      activeProfile = {
+        ...fallback,
+        ...stored,
+        incomingLanguage:
+          stored?.incomingLanguage ??
+          currentSettings.conversationLanguageOverrides[key] ??
+          "auto"
+      };
+      if (activeProfile.targetLanguage === currentSettings.userLanguage) {
+        activeProfile.targetLanguage = fallback.targetLanguage;
+      }
+      renderConversationProfile();
+    };
+
+    const persistActiveProfile = async (
+      patch: Partial<ConversationProfile>
+    ): Promise<void> => {
+      activeProfile = { ...activeProfile, ...patch };
+      const profiles = {
+        ...currentSettings.conversationProfiles,
+        [currentConversationKey || activeConversationKey()]: activeProfile
+      };
+      await persistPanelSettings({ conversationProfiles: profiles });
+      renderConversationProfile();
+    };
+
     const selectedConversationLanguage = (): TranslationSourceLanguage =>
-      currentSettings.conversationLanguageOverrides[activeConversationKey()] ?? "auto";
+      activeProfile.incomingLanguage;
 
     const syncIncomingOverlays = (translateNewMessages: boolean) => {
+      syncConversationProfile();
       const candidates = findIncomingMessages(document);
       const seen = new Set<HTMLElement>();
       const allCandidateContainers = new Set(candidates.map((candidate) => candidate.container));
@@ -814,10 +1025,52 @@ export default defineContentScript({
     document.addEventListener("focusin", (event) => updateComposer(event.target), true);
     document.addEventListener("pointerdown", (event) => updateComposer(event.target), true);
 
+    let dragState: { pointerId: number; offsetX: number; offsetY: number } | null = null;
+    header.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+      const rect = panel.getBoundingClientRect();
+      dragState = {
+        pointerId: event.pointerId,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top
+      };
+      header.setPointerCapture(event.pointerId);
+      panel.classList.add("zat-dragging");
+      event.preventDefault();
+    });
+    header.addEventListener("pointermove", (event) => {
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+      applyPanelPosition(
+        event.clientX - dragState.offsetX,
+        event.clientY - dragState.offsetY
+      );
+    });
+    const finishDragging = (event: PointerEvent) => {
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+      dragState = null;
+      panel.classList.remove("zat-dragging");
+      const rect = panel.getBoundingClientRect();
+      const position = applyPanelPosition(rect.left, rect.top);
+      void persistPanelSettings({ panelPosition: position }).catch(() => undefined);
+    };
+    header.addEventListener("pointerup", finishDragging);
+    header.addEventListener("pointercancel", finishDragging);
+    resetPositionButton.addEventListener("click", () => {
+      panel.style.removeProperty("left");
+      panel.style.removeProperty("top");
+      panel.style.removeProperty("right");
+      panel.style.removeProperty("bottom");
+      void persistPanelSettings({ panelPosition: null }).catch(() => undefined);
+    });
+
     collapseButton.addEventListener("click", () => {
       const collapsed = body.classList.toggle("zat-hidden");
       collapseButton.textContent = collapsed ? "+" : "−";
       collapseButton.setAttribute("aria-label", collapsed ? t("expand") : t("collapse"));
+      requestAnimationFrame(() => {
+        const rect = panel.getBoundingClientRect();
+        applyPanelPosition(rect.left, rect.top);
+      });
     });
 
     translateButton.addEventListener("click", () => void requestTranslation());
@@ -828,24 +1081,46 @@ export default defineContentScript({
     sourceText.addEventListener("input", invalidatePreview);
     const handleTranslationOptionChange = () => {
       invalidatePreview();
-      void persistPanelSettings({
+      void persistActiveProfile({
         tone: toneSelect.value as TranslationTone,
-        vietnameseAddress: addressSelect.value as VietnameseAddress,
-        outgoingTargetLanguage: targetSelect.value as TranslationLanguage
+        targetLanguage: targetSelect.value as TranslationLanguage,
+        incomingLanguage: conversationLanguageSelect.value as TranslationSourceLanguage,
+        relationship: relationshipSelect.value as ConversationRelationship,
+        relativeAge: relativeAgeSelect.value as RelativeAge,
+        recipientGender: recipientGenderSelect.value as ParticipantGender
       }).catch(() => undefined);
       if (sourceText.value.trim()) void requestTranslation();
     };
     toneSelect.addEventListener("change", handleTranslationOptionChange);
-    addressSelect.addEventListener("change", handleTranslationOptionChange);
+    relationshipSelect.addEventListener("change", handleTranslationOptionChange);
+    relativeAgeSelect.addEventListener("change", handleTranslationOptionChange);
+    recipientGenderSelect.addEventListener("change", handleTranslationOptionChange);
     targetSelect.addEventListener("change", handleTranslationOptionChange);
     conversationLanguageSelect.addEventListener("change", () => {
-      const overrides = { ...currentSettings.conversationLanguageOverrides };
-      const value = conversationLanguageSelect.value as TranslationSourceLanguage;
-      if (value === "auto") delete overrides[activeConversationKey()];
-      else overrides[activeConversationKey()] = value;
-      void persistPanelSettings({ conversationLanguageOverrides: overrides })
+      handleTranslationOptionChange();
+      void Promise.resolve()
         .then(() => syncIncomingOverlays(false))
         .catch(() => undefined);
+    });
+    conversationSettingsHeader.addEventListener("click", () => {
+      conversationSettingsEditing = true;
+      setConversationSettingsCollapsed(false);
+    });
+    doneConversationButton.addEventListener("click", () => {
+      conversationSettingsEditing = false;
+      void persistActiveProfile({ configured: true }).catch(() => undefined);
+    });
+    resetConversationButton.addEventListener("click", () => {
+      const profiles = { ...currentSettings.conversationProfiles };
+      delete profiles[currentConversationKey];
+      const overrides = { ...currentSettings.conversationLanguageOverrides };
+      delete overrides[currentConversationKey];
+      activeProfile = defaultConversationProfile(currentSettings);
+      conversationSettingsEditing = true;
+      void persistPanelSettings({
+        conversationProfiles: profiles,
+        conversationLanguageOverrides: overrides
+      }).then(renderConversationProfile).catch(() => undefined);
     });
     incomingToggle.addEventListener("change", () => {
       void persistPanelSettings({ autoTranslateIncoming: incomingToggle.checked }).catch(() => {
@@ -883,12 +1158,15 @@ export default defineContentScript({
       cancelTranslation();
     });
 
-    toneSelect.value = currentSettings.tone;
-    addressSelect.value = currentSettings.vietnameseAddress;
-    targetSelect.value = currentSettings.outgoingTargetLanguage;
-    conversationLanguageSelect.value = selectedConversationLanguage();
+    syncConversationProfile();
     incomingToggle.checked = currentSettings.autoTranslateIncoming;
     if (!currentSettings.enabled) body.classList.add("zat-hidden");
     refreshControls();
+    requestAnimationFrame(restorePanelPosition);
+    window.addEventListener("resize", () => {
+      const rect = panel.getBoundingClientRect();
+      const position = applyPanelPosition(rect.left, rect.top);
+      currentSettings.panelPosition = position;
+    });
   }
 });

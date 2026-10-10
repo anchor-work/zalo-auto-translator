@@ -102,6 +102,35 @@ describe("Gemini translation backend", () => {
     expect(instruction).toContain("Use em for the speaker and anh for the recipient");
   });
 
+  it("passes gender-aware social context to Gemini", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ candidates: [{ content: { parts: [{ text: "Em sẽ gọi cho anh." }] } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    await translateWithGemini(
+      validateTranslationRequest({
+        text: "제가 전화할게요.",
+        sourceLanguage: "ko",
+        targetLanguage: "vi",
+        tone: "natural",
+        vietnameseAddress: "older_male",
+        socialContext: {
+          speakerGender: "female",
+          recipientGender: "male",
+          recipientRelativeAge: "older",
+          relationship: "friend"
+        }
+      }),
+      { apiKey: "test-key", fetchImpl }
+    );
+    const requestBody = JSON.parse(fetchImpl.mock.calls[0][1].body);
+    expect(requestBody.system_instruction.parts[0].text).toContain(
+      "the speaker gender is female"
+    );
+  });
+
   it("uses the fallback model only after retryable primary failures", async () => {
     const busy = (status = 503) =>
       new Response(

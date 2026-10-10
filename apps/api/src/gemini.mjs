@@ -3,6 +3,9 @@ const DEFAULT_MODEL = "gemini-3.1-flash-lite";
 const MAX_INPUT_CHARACTERS = 5_000;
 const SOURCE_LANGUAGES = new Set(["auto", "ko", "vi", "en"]);
 const TARGET_LANGUAGES = new Set(["ko", "vi", "en"]);
+const PARTICIPANT_GENDERS = new Set(["male", "female", "unknown"]);
+const RELATIVE_AGES = new Set(["older", "same", "younger", "unknown"]);
+const RELATIONSHIPS = new Set(["unknown", "friend", "coworker", "customer", "group"]);
 const LANGUAGE_NAMES = {
   auto: "the automatically detected source language",
   ko: "Korean",
@@ -85,6 +88,30 @@ export function validateTranslationRequest(value) {
   if (!Object.hasOwn(VIETNAMESE_ADDRESS_INSTRUCTIONS, vietnameseAddress)) {
     throw new TranslationError("지원하지 않는 베트남어 호칭 설정입니다.", 400, "unsupported_address");
   }
+  let socialContext;
+  if (value.socialContext !== undefined) {
+    const context = value.socialContext;
+    if (
+      !context ||
+      typeof context !== "object" ||
+      !PARTICIPANT_GENDERS.has(context.speakerGender) ||
+      !PARTICIPANT_GENDERS.has(context.recipientGender) ||
+      !RELATIVE_AGES.has(context.recipientRelativeAge) ||
+      !RELATIONSHIPS.has(context.relationship)
+    ) {
+      throw new TranslationError(
+        "지원하지 않는 관계 정보입니다.",
+        400,
+        "unsupported_social_context"
+      );
+    }
+    socialContext = {
+      speakerGender: context.speakerGender,
+      recipientGender: context.recipientGender,
+      recipientRelativeAge: context.recipientRelativeAge,
+      relationship: context.relationship
+    };
+  }
 
   return {
     text,
@@ -92,6 +119,7 @@ export function validateTranslationRequest(value) {
     targetLanguage: value.targetLanguage,
     tone: value.tone,
     vietnameseAddress,
+    socialContext,
     requestId:
       typeof value.requestId === "string" && value.requestId.length <= 128
         ? value.requestId
@@ -142,16 +170,22 @@ export async function translateWithGemini(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const addressInstruction =
-    request.targetLanguage === "vi"
+    request.targetLanguage === "vi" && request.socialContext?.relationship === "group"
+      ? "Vietnamese address terms are important. This is a group conversation; use tôi or chúng tôi for the speaker and mọi người or các bạn for the group only when a pronoun is naturally needed."
+      : request.targetLanguage === "vi"
       ? `Vietnamese address terms are important. ${VIETNAMESE_ADDRESS_INSTRUCTIONS[request.vietnameseAddress]}`
       : "Preserve the social relationship and level of respect expressed in the source without inventing one.";
+  const socialInstruction = request.socialContext
+    ? `Social context for choosing kinship and address terms: the speaker gender is ${request.socialContext.speakerGender}; the recipient gender is ${request.socialContext.recipientGender}; the recipient is ${request.socialContext.recipientRelativeAge} relative to the speaker; their relationship is ${request.socialContext.relationship}. Use this only when the target language naturally requires gendered or age-based forms of address. Do not add relationship words that are absent and unnecessary.`
+    : "No additional social context is available.";
   const systemInstruction = `You are a multilingual chat translation engine.
 Translate only the user's message from ${LANGUAGE_NAMES[request.sourceLanguage]} into ${LANGUAGE_NAMES[request.targetLanguage]}.
 Return only the translation, without explanations, labels, or quotation marks.
 Never answer the message or add information.
 Preserve names, numbers, URLs, phone numbers, emojis, and line breaks.
 ${TONE_INSTRUCTIONS[request.tone]}
-${addressInstruction}`;
+${addressInstruction}
+${socialInstruction}`;
 
   try {
     const requestBody = JSON.stringify({

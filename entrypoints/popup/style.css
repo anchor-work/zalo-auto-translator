@@ -45,6 +45,83 @@ section.settings {
   width: 42px;
 }
 
+.field-group {
+  border: 0;
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.field-label,
+legend {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.field-description {
+  color: #657086;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.segmented {
+  display: grid;
+  gap: 6px;
+}
+
+.language-segmented {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.language-segmented button {
+  background: #fff;
+  border: 1px solid #c9d7ee;
+  color: #364156;
+  font-size: 11px;
+  padding: 9px 5px;
+}
+
+.language-segmented button.selected {
+  background: #2867e8;
+  border-color: #2867e8;
+  color: #fff;
+}
+
+.gender-segmented {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.gender-segmented label {
+  display: block;
+}
+
+.gender-segmented input {
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.gender-segmented span {
+  background: #fff;
+  border: 1px solid #c9d7ee;
+  border-radius: 8px;
+  color: #364156;
+  cursor: pointer;
+  display: block;
+  padding: 9px;
+  text-align: center;
+}
+
+.gender-segmented input:checked + span {
+  background: #e9f1ff;
+  border-color: #2867e8;
+  color: #1d56c6;
+}
+
 h1,
 h2,
 p {

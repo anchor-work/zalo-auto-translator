@@ -28,9 +28,26 @@
 .zat-header {
   align-items: center;
   border-bottom: 1px solid #edf1f7;
+  cursor: grab;
   display: flex;
   justify-content: space-between;
   padding: 12px 14px;
+  touch-action: none;
+  user-select: none;
+}
+
+.zat-dragging .zat-header {
+  cursor: grabbing;
+}
+
+.zat-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+}
+
+.zat-position-reset {
+  font-size: 16px !important;
 }
 
 .zat-body {
@@ -75,6 +92,57 @@
 .zat-incoming-toggle {
   border-top: 1px solid #edf1f7;
   padding-top: 12px;
+}
+
+.zat-conversation-settings {
+  background: #f7f9fc;
+  border: 1px solid #e2e8f2;
+  border-radius: 11px;
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+}
+
+.zat-conversation-settings > strong {
+  color: #263247;
+  font-size: 12px;
+}
+
+.zat-conversation-summary {
+  align-items: center;
+  background: #f5f8fc;
+  border: 1px solid #dde5f1;
+  color: #364156;
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.zat-conversation-summary:hover {
+  background: #edf3fc;
+  border-color: #bfd0eb;
+}
+
+.zat-summary-edit {
+  color: #2867e8;
+  font-size: 15px;
+}
+
+.zat-settings-actions {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.zat-address-recommendation {
+  background: #eef5ff;
+  border-radius: 7px;
+  color: #31577d;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 7px 8px;
 }
 
 label {
@@ -181,40 +249,47 @@ button:disabled {
 
 .zat-incoming-icon {
   align-items: center;
-  background: #2867e8;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  box-shadow: 0 3px 10px rgba(22, 34, 55, 0.32);
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #cfdaea;
+  border-radius: 9px;
+  box-shadow: 0 2px 8px rgba(22, 34, 55, 0.16);
   box-sizing: border-box;
-  color: #ffffff;
+  color: #52647d;
   cursor: pointer;
   display: flex;
-  height: 30px;
+  height: 28px;
   justify-content: center;
   padding: 0;
   pointer-events: auto;
   position: absolute;
-  transition: background 0.15s, box-shadow 0.15s, transform 0.15s;
-  width: 30px;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, color 0.15s, transform 0.15s;
+  width: 28px;
 }
 
 .zat-incoming-icon:hover {
-  background: #1d56c6;
-  box-shadow: 0 4px 14px rgba(22, 34, 55, 0.4);
-  transform: scale(1.08);
+  background: #2867e8;
+  border-color: #2867e8;
+  box-shadow: 0 4px 12px rgba(40, 103, 232, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
 }
 
 .zat-incoming-icon[data-state="translated"] {
-  background: #18794e;
+  background: #eaf8f1;
+  border-color: #9ed6ba;
+  color: #18794e;
 }
 
 .zat-incoming-icon[data-state="error"] {
-  background: #c52a2a;
+  background: #fff1f1;
+  border-color: #efb4b4;
+  color: #c52a2a;
 }
 
 .zat-incoming-icon[data-state="loading"] {
   cursor: wait;
-  opacity: 0.7;
+  color: #2867e8;
 }
 
 .zat-incoming-icon svg {
@@ -222,6 +297,15 @@ button:disabled {
   height: 17px;
   pointer-events: none;
   width: 17px;
+}
+
+.zat-incoming-icon[data-state="loading"] svg {
+  animation: zat-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes zat-pulse {
+  from { opacity: 0.35; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .zat-incoming-card {

@@ -14,7 +14,18 @@
         <div class="welcome-mark" aria-hidden="true">文A</div>
         <h2 id="welcome-title"></h2>
         <p id="welcome-description" class="description"></p>
-        <label><span id="onboarding-language-label"></span><select id="onboarding-language"></select></label>
+        <div class="field-group">
+          <span id="onboarding-language-label" class="field-label"></span>
+          <div id="language-buttons" class="segmented language-segmented" role="group"></div>
+        </div>
+        <fieldset class="field-group">
+          <legend id="onboarding-gender-label"></legend>
+          <p id="gender-description" class="field-description"></p>
+          <div class="segmented gender-segmented">
+            <label><input type="radio" name="onboarding-gender" value="male" /><span id="onboarding-male"></span></label>
+            <label><input type="radio" name="onboarding-gender" value="female" /><span id="onboarding-female"></span></label>
+          </div>
+        </fieldset>
         <label><span id="onboarding-target-label"></span><select id="onboarding-target"></select></label>
         <button id="start" type="button"></button>
       </section>
@@ -22,6 +33,7 @@
       <section id="settings" class="settings" hidden>
         <label class="toggle"><input id="enabled" type="checkbox" /><span id="enabled-label"></span></label>
         <label><span id="user-language-label"></span><select id="user-language"></select></label>
+        <label><span id="user-gender-label"></span><select id="user-gender"></select></label>
         <label><span id="target-language-label"></span><select id="target-language"></select></label>
         <div id="language-hint" class="hint"></div>
         <section class="usage" aria-labelledby="usage-title">

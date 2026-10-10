@@ -9,6 +9,15 @@ export type TranslationMode = "demo" | "local-api";
 export type TranslationLanguage = "ko" | "vi" | "en";
 export type TranslationSourceLanguage = TranslationLanguage | "auto";
 export type TranslationTargetLanguage = TranslationLanguage;
+export type UserGender = "male" | "female";
+export type ParticipantGender = UserGender | "unknown";
+export type RelativeAge = "unknown" | "older" | "same" | "younger";
+export type ConversationRelationship =
+  | "unknown"
+  | "friend"
+  | "coworker"
+  | "customer"
+  | "group";
 export type VietnameseAddress =
   | "neutral"
   | "older_male"
@@ -20,16 +29,41 @@ export type VietnameseAddress =
   | "much_older_female"
   | "customer";
 
+export interface PanelPosition {
+  left: number;
+  top: number;
+}
+
+export interface ConversationProfile {
+  targetLanguage: TranslationLanguage;
+  incomingLanguage: TranslationSourceLanguage;
+  tone: TranslationTone;
+  relationship: ConversationRelationship;
+  relativeAge: RelativeAge;
+  recipientGender: ParticipantGender;
+  configured: boolean;
+}
+
+export interface TranslationSocialContext {
+  speakerGender: ParticipantGender;
+  recipientGender: ParticipantGender;
+  recipientRelativeAge: RelativeAge;
+  relationship: ConversationRelationship;
+}
+
 export interface ExtensionSettings {
-  schemaVersion: 5;
+  schemaVersion: 6;
   enabled: boolean;
   userLanguage: TranslationLanguage;
+  userGender: UserGender | null;
   languageSetupCompleted: boolean;
   tone: TranslationTone;
   vietnameseAddress: VietnameseAddress;
   outgoingTargetLanguage: TranslationLanguage;
   autoTranslateIncoming: boolean;
   conversationLanguageOverrides: Record<string, TranslationSourceLanguage>;
+  conversationProfiles: Record<string, ConversationProfile>;
+  panelPosition: PanelPosition | null;
   mode: TranslationMode;
   localApiBaseUrl: string;
 }
@@ -40,6 +74,7 @@ export interface TranslationRequest {
   targetLanguage: TranslationTargetLanguage;
   tone: TranslationTone;
   vietnameseAddress: VietnameseAddress;
+  socialContext?: TranslationSocialContext;
   requestId: string;
 }
 

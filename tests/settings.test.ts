@@ -10,13 +10,16 @@ describe("settings migration", () => {
       outgoingTargetLanguage: "en"
     });
     expect(settings).toMatchObject({
-      schemaVersion: 5,
+      schemaVersion: 6,
       enabled: false,
       userLanguage: "ko",
+      userGender: null,
       languageSetupCompleted: false,
       tone: "friendly",
       outgoingTargetLanguage: "en",
-      conversationLanguageOverrides: {}
+      conversationLanguageOverrides: {},
+      conversationProfiles: {},
+      panelPosition: null
     });
   });
 

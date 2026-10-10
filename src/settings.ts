@@ -6,20 +6,24 @@ export const PRODUCTION_API_BASE_URL =
   "https://zalo-translator-api-s6bip5vp3a-du.a.run.app";
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   enabled: true,
   userLanguage: "ko",
+  userGender: null,
   languageSetupCompleted: false,
   tone: "natural",
   vietnameseAddress: "neutral",
   outgoingTargetLanguage: "vi",
   autoTranslateIncoming: false,
   conversationLanguageOverrides: {},
+  conversationProfiles: {},
+  panelPosition: null,
   mode: "local-api",
   localApiBaseUrl: PRODUCTION_API_BASE_URL
 };
 
 const LANGUAGES = new Set(["ko", "en", "vi"]);
+const GENDERS = new Set(["male", "female"]);
 
 export function normalizeSettings(
   value?: Partial<ExtensionSettings>
@@ -37,14 +41,25 @@ export function normalizeSettings(
   return {
     ...DEFAULT_SETTINGS,
     ...value,
-    schemaVersion: 5,
+    schemaVersion: 6,
     userLanguage,
+    userGender: GENDERS.has(value?.userGender ?? "") ? value!.userGender! : null,
     outgoingTargetLanguage,
     conversationLanguageOverrides:
       value?.conversationLanguageOverrides &&
       typeof value.conversationLanguageOverrides === "object"
         ? value.conversationLanguageOverrides
-        : {}
+        : {},
+    conversationProfiles:
+      value?.conversationProfiles && typeof value.conversationProfiles === "object"
+        ? value.conversationProfiles
+        : {},
+    panelPosition:
+      value?.panelPosition &&
+      Number.isFinite(value.panelPosition.left) &&
+      Number.isFinite(value.panelPosition.top)
+        ? value.panelPosition
+        : null
   };
 }
 
