@@ -2,7 +2,7 @@ import { browser } from "wxt/browser";
 import { getEnterAction, type ComposeOperation } from "../../src/compose-flow";
 import { languageName, toneName, uiText } from "../../src/i18n";
 import { incomingTranslationDecision } from "../../src/language";
-import { DEFAULT_SETTINGS } from "../../src/settings";
+import { DEFAULT_SETTINGS, normalizeSettings } from "../../src/settings";
 import {
   defaultConversationProfile,
   incomingSocialContext,
@@ -78,7 +78,7 @@ export default defineContentScript({
     } catch {
       // Keep migrated defaults so the content UI remains usable offline.
     }
-    const uiLanguage = currentSettings.userLanguage;
+    let uiLanguage = currentSettings.userLanguage;
     const t = (key: Parameters<typeof uiText>[1], variables?: Record<string, string | number>) =>
       uiText(uiLanguage, key, variables);
     const incomingCache = new Map<string, string>();
@@ -89,6 +89,7 @@ export default defineContentScript({
     const host = document.createElement("div");
     host.id = ROOT_ID;
     host.dataset.extensionVersion = extensionVersion;
+    host.dataset.uiLanguage = uiLanguage;
     host.dataset.status = "starting";
     const shadow = host.attachShadow({ mode: "open" });
     document.documentElement.append(host);
@@ -996,6 +997,137 @@ export default defineContentScript({
       });
       repositionIncomingOverlays();
     };
+
+    const setLabelCaption = (label: HTMLLabelElement, caption: string) => {
+      const captionNode = label.firstChild;
+      if (captionNode?.nodeType === Node.TEXT_NODE) {
+        captionNode.textContent = caption;
+      } else {
+        label.prepend(document.createTextNode(caption));
+      }
+    };
+
+    const localizePanel = () => {
+      host.dataset.uiLanguage = uiLanguage;
+      panel.setAttribute("aria-label", t("appName"));
+      header.title = t("dragPanel");
+      title.textContent = t("panelTitle");
+      resetPositionButton.setAttribute("aria-label", t("resetPanelPosition"));
+      resetPositionButton.title = t("resetPanelPosition");
+      collapseButton.setAttribute(
+        "aria-label",
+        body.classList.contains("zat-hidden") ? t("expand") : t("collapse")
+      );
+
+      setLabelCaption(sourceLabel, t("sourceMessage", {
+        language: languageName(uiLanguage, currentSettings.userLanguage)
+      }));
+      sourceText.placeholder = t("sourcePlaceholder", {
+        language: languageName(uiLanguage, currentSettings.userLanguage)
+      });
+      setLabelCaption(targetLabel, t("targetLanguage"));
+      targetSelect.replaceChildren();
+      targetOptions.filter((value) => value !== currentSettings.userLanguage).forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = languageName(uiLanguage, value);
+        targetSelect.append(option);
+      });
+      setLabelCaption(conversationLanguageLabel, t("conversationLanguage"));
+      conversationLanguageSelect.querySelectorAll<HTMLOptionElement>("option").forEach((option) => {
+        option.textContent = option.value === "auto"
+          ? t("detectAutomatically")
+          : languageName(uiLanguage, option.value as TranslationLanguage);
+      });
+      setLabelCaption(relationshipLabel, t("relationship"));
+      relationshipSelect.querySelectorAll<HTMLOptionElement>("option").forEach((option) => {
+        const item = relationships.find(([value]) => value === option.value);
+        if (item) option.textContent = t(item[1]);
+      });
+      setLabelCaption(relativeAgeLabel, t("relativeAge"));
+      relativeAgeSelect.querySelectorAll<HTMLOptionElement>("option").forEach((option) => {
+        const item = ages.find(([value]) => value === option.value);
+        if (item) option.textContent = t(item[1]);
+      });
+      setLabelCaption(recipientGenderLabel, t("recipientGender"));
+      recipientGenderSelect.querySelectorAll<HTMLOptionElement>("option").forEach((option) => {
+        const item = recipientGenders.find(([value]) => value === option.value);
+        if (item) option.textContent = t(item[1]);
+      });
+      setLabelCaption(toneLabel, t("tone"));
+      toneSelect.querySelectorAll<HTMLOptionElement>("option").forEach((option) => {
+        option.textContent = toneName(uiLanguage, option.value as TranslationTone);
+      });
+
+      conversationSettingsHeader.setAttribute("aria-label", t("editConversationSettings"));
+      conversationSettingsTitle.textContent = t("conversationSettings");
+      resetConversationButton.textContent = t("resetConversationSettings");
+      doneConversationButton.textContent = t("conversationSettingsDone");
+      incomingToggleText.textContent = t("autoIncoming");
+      incomingHint.textContent = t("incomingHint");
+      clearAllButton.textContent = t("clearAll");
+      previewLabel.firstChild!.textContent = t("preview");
+      cancelButton.textContent = t("cancel");
+      host.style.setProperty("--zat-stale-message", JSON.stringify(t("stale")));
+      host.style.setProperty(
+        "--zat-incoming-title",
+        JSON.stringify(t("incomingTitle", { language: languageName(uiLanguage, uiLanguage) }))
+      );
+
+      incomingOverlays.forEach((overlay) => {
+        const state = overlay.button.dataset.state;
+        const key = !overlay.result.hidden
+          ? "incomingClose"
+          : state === "loading"
+            ? "incomingLoading"
+            : state === "error"
+              ? "incomingRetry"
+              : "incomingTranslate";
+        overlay.button.setAttribute("aria-label", t(key, {
+          language: languageName(uiLanguage, uiLanguage)
+        }));
+        overlay.button.title = overlay.button.getAttribute("aria-label") ?? "";
+        overlay.result.title = t("closeTranslation");
+      });
+      renderConversationProfile();
+      refreshControls();
+    };
+
+    const resetIncomingOverlaysForLanguage = () => {
+      incomingCache.clear();
+      incomingOverlays.forEach((overlay) => {
+        incomingResizeObserver.unobserve(overlay.candidate.container);
+        overlay.button.remove();
+        overlay.result.remove();
+      });
+      incomingOverlays.clear();
+      openOverlay = null;
+      syncIncomingOverlays(false);
+    };
+
+    browser.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== "local" || !changes.settings?.newValue) return;
+      const nextSettings = normalizeSettings(
+        changes.settings.newValue as Partial<ExtensionSettings>
+      );
+      const languageChanged = nextSettings.userLanguage !== currentSettings.userLanguage;
+      const enabledChanged = nextSettings.enabled !== currentSettings.enabled;
+      currentSettings = nextSettings;
+      incomingToggle.checked = currentSettings.autoTranslateIncoming;
+      if (enabledChanged) body.classList.toggle("zat-hidden", !currentSettings.enabled);
+      if (!languageChanged) return;
+
+      uiLanguage = currentSettings.userLanguage;
+      requestSequence += 1;
+      operation = "idle";
+      clearPreview();
+      if (activeProfile.targetLanguage === uiLanguage) {
+        activeProfile.targetLanguage = currentSettings.outgoingTargetLanguage;
+      }
+      localizePanel();
+      setStatus(t("clickComposer"));
+      resetIncomingOverlaysForLanguage();
+    });
 
     let incomingScanTimer: ReturnType<typeof setTimeout> | undefined;
     const incomingObserver = new MutationObserver(() => {
