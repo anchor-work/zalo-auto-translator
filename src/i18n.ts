@@ -41,7 +41,7 @@ const copy = {
     conversationSettings: "대화 설정",
     editConversationSettings: "대화 설정 편집",
     conversationSettingsDone: "설정 완료",
-    resetConversationSettings: "기본값으로 되돌리기",
+    resetConversationSettings: "재설정",
     relationship: "상대방과의 관계",
     relationshipUnknown: "모름",
     relationshipFriend: "친구",
