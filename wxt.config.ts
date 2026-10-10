@@ -14,9 +14,9 @@ export default defineConfig({
     };
 
     return {
-      name: "Zalo 다국어 메시지 번역기",
-      description: "Zalo Web에서 한국어·영어·베트남어 메시지를 작성하고 받은 메시지를 내 언어로 번역합니다.",
-      version: "0.10.2",
+      name: "Zalo Language Bridge",
+      description: "Write and understand Zalo Web messages naturally across Korean, English, and Vietnamese.",
+      version: "0.10.3",
       permissions: ["storage"],
       host_permissions: development
         ? [
@@ -28,7 +28,7 @@ export default defineConfig({
         : ["https://chat.zalo.me/*", `${PRODUCTION_API_ORIGIN}/*`],
       icons,
       action: {
-        default_title: "Zalo 번역기 설정",
+        default_title: "Zalo Language Bridge Settings",
         default_icon: icons
       }
     };

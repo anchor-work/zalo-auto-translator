@@ -6,7 +6,7 @@ import type {
 
 const copy = {
   ko: {
-    appName: "Zalo 번역기",
+    appName: "Zalo Language Bridge",
     popupDescription: "내 언어로 작성하고, 상대방의 언어로 자연스럽게 번역하세요.",
     welcomeTitle: "먼저 내 언어를 선택하세요",
     welcomeDescription: "화면 표시와 받은 메시지 번역에 사용할 기본 언어입니다.",
@@ -106,7 +106,7 @@ const copy = {
     editedPreview: "수정한 번역문을 확인하세요. Enter를 누르면 전송됩니다."
   },
   en: {
-    appName: "Zalo Translator", popupDescription: "Write in your language and translate naturally for the recipient.",
+    appName: "Zalo Language Bridge", popupDescription: "Write in your language and translate naturally for the recipient.",
     welcomeTitle: "Choose your language first", welcomeDescription: "This language is used for the interface and incoming-message translations.",
     languageSelector: "Language · 언어 · Ngôn ngữ", userLanguage: "My language", userGender: "Your gender",
     genderDescription: "Used to translate relationship-based forms of address naturally.", male: "Male", female: "Female", genderRequired: "Choose your gender.",
@@ -144,7 +144,7 @@ const copy = {
     autoSaveFailed: "Could not save the auto-translation setting.", editedPreview: "Review the edited translation. Press Enter to send."
   },
   vi: {
-    appName: "Trình dịch Zalo", popupDescription: "Soạn bằng ngôn ngữ của bạn và dịch tự nhiên cho người nhận.",
+    appName: "Zalo Language Bridge", popupDescription: "Soạn bằng ngôn ngữ của bạn và dịch tự nhiên cho người nhận.",
     welcomeTitle: "Trước tiên, hãy chọn ngôn ngữ của bạn", welcomeDescription: "Ngôn ngữ này dùng cho giao diện và bản dịch tin nhắn nhận được.",
     languageSelector: "Language · 언어 · Ngôn ngữ", userLanguage: "Ngôn ngữ của tôi", userGender: "Giới tính của bạn",
     genderDescription: "Dùng để dịch cách xưng hô theo quan hệ một cách tự nhiên.", male: "Nam", female: "Nữ", genderRequired: "Hãy chọn giới tính của bạn.",

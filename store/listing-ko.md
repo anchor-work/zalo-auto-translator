@@ -2,11 +2,11 @@
 
 ## 제품 이름
 
-Zalo 다국어 메시지 번역기
+Zalo Language Bridge
 
 ## 요약 설명
 
-Zalo Web에서 한국어·영어·베트남어 메시지를 작성하고 받은 메시지를 내 언어로 번역하세요.
+Write and understand Zalo Web messages naturally across Korean, English, and Vietnamese.
 
 ## 자세한 설명
 
