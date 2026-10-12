@@ -24,9 +24,14 @@ import type {
   TranslationTone,
   VietnameseAddress
 } from "../../src/types";
-import { findComposerFromFocus, sendComposer } from "../../src/zalo/dom-adapter";
+import {
+  findComposerFromFocus,
+  isUsableComposer,
+  sendComposer
+} from "../../src/zalo/dom-adapter";
 import {
   findIncomingMessages,
+  groupConsecutiveIncomingMessages,
   incomingCandidateStillMatches,
   type IncomingMessageCandidate
 } from "../../src/zalo/incoming-adapter";
@@ -444,7 +449,7 @@ export default defineContentScript({
     };
 
     const getActiveComposer = (): HTMLElement | null => {
-      if (activeComposer && document.contains(activeComposer)) return activeComposer;
+      if (activeComposer && isUsableComposer(activeComposer)) return activeComposer;
       setStatus(t("composerRequired"), "error");
       return null;
     };
@@ -929,9 +934,13 @@ export default defineContentScript({
 
     const syncIncomingOverlays = (translateNewMessages: boolean) => {
       syncConversationProfile();
-      const candidates = findIncomingMessages(document);
+      const candidates = groupConsecutiveIncomingMessages(findIncomingMessages(document));
       const seen = new Set<HTMLElement>();
-      const allCandidateContainers = new Set(candidates.map((candidate) => candidate.container));
+      const allCandidateContainers = new Set(
+        candidates.flatMap((candidate) =>
+          candidate.members?.map((member) => member.container) ?? [candidate.container]
+        )
+      );
       const conversationLanguage = selectedConversationLanguage();
       conversationLanguageSelect.value = conversationLanguage;
       candidates.forEach((candidate) => {

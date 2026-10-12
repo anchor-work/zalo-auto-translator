@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   findIncomingMessages,
+  groupConsecutiveIncomingMessages,
   incomingCandidateStillMatches,
   resolveIncomingMessageFromTarget
 } from "../src/zalo/incoming-adapter";
@@ -612,5 +613,127 @@ Anh xem xét phương án này nhé, nếu cần hỗ trợ thì bên em có cun
 
     bubble.remove();
     expect(incomingCandidateStillMatches(candidate)).toBe(false);
+  });
+
+  it("groups adjacent incoming bubbles and anchors translation to the last one", () => {
+    const row = document.createElement("div");
+    const first = document.createElement("div");
+    const second = document.createElement("div");
+    first.textContent = "Xin chào";
+    second.textContent = "Bạn khỏe không?";
+    row.append(first, second);
+    document.body.append(row);
+
+    const candidates = [
+      { container: first, textElement: first, text: "Xin chào" },
+      { container: second, textElement: second, text: "Bạn khỏe không?" }
+    ];
+    expect(groupConsecutiveIncomingMessages(candidates)).toEqual([
+      {
+        container: second,
+        textElement: second,
+        text: "Xin chào\n\nBạn khỏe không?",
+        members: candidates
+      }
+    ]);
+  });
+
+  it("does not group adjacent structured messages from different senders", () => {
+    const first = document.createElement("div");
+    first.dataset.component = "message-content-view";
+    first.innerHTML = '<div class="message-sender-name-wrapper">Minh</div>';
+    const second = document.createElement("div");
+    second.dataset.component = "message-content-view";
+    second.innerHTML = '<div class="message-sender-name-wrapper">Linh</div>';
+    document.body.append(first, second);
+
+    const candidates = [
+      { container: first, textElement: first, text: "First" },
+      { container: second, textElement: second, text: "Second" }
+    ];
+    expect(groupConsecutiveIncomingMessages(candidates)).toEqual(candidates);
+  });
+
+  it("groups a structured sender run when only the first message shows the name", () => {
+    const first = document.createElement("div");
+    first.dataset.component = "message-content-view";
+    first.innerHTML = '<div class="message-sender-name-wrapper">Minh</div>';
+    const second = document.createElement("div");
+    second.dataset.component = "message-content-view";
+    document.body.append(first, second);
+
+    const candidates = [
+      { container: first, textElement: first, text: "First" },
+      { container: second, textElement: second, text: "Second" }
+    ];
+    const grouped = groupConsecutiveIncomingMessages(candidates);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]).toMatchObject({
+      container: second,
+      text: "First\n\nSecond",
+      members: candidates
+    });
+  });
+
+  it("does not group adjacent visual bubbles with different visible senders", () => {
+    const row = document.createElement("div");
+    const first = document.createElement("div");
+    first.innerHTML = '<span class="sender-name">Minh</span><span>First</span>';
+    const second = document.createElement("div");
+    second.innerHTML = '<span class="sender-name">Linh</span><span>Second</span>';
+    row.append(first, second);
+    document.body.append(row);
+
+    const candidates = [
+      { container: first, textElement: first, text: "First" },
+      { container: second, textElement: second, text: "Second" }
+    ];
+    expect(groupConsecutiveIncomingMessages(candidates)).toEqual(candidates);
+  });
+
+  it("keeps consecutive runs separate when a file or other row is between them", () => {
+    const row = document.createElement("div");
+    const first = document.createElement("div");
+    const file = document.createElement("div");
+    const second = document.createElement("div");
+    row.append(first, file, second);
+    document.body.append(row);
+
+    const candidates = [
+      { container: first, textElement: first, text: "Before file" },
+      { container: second, textElement: second, text: "After file" }
+    ];
+    expect(groupConsecutiveIncomingMessages(candidates)).toEqual(candidates);
+  });
+
+  it("checks every message when validating a grouped candidate", () => {
+    const first = document.createElement("div");
+    const second = document.createElement("div");
+    first.textContent = "Xin chào";
+    second.textContent = "Bạn khỏe không?";
+    document.body.append(first, second);
+    const members = [
+      { container: first, textElement: first, text: "Xin chào" },
+      { container: second, textElement: second, text: "Bạn khỏe không?" }
+    ];
+    const grouped = groupConsecutiveIncomingMessages(members)[0]!;
+
+    expect(incomingCandidateStillMatches(grouped)).toBe(true);
+    first.textContent = "Changed";
+    expect(incomingCandidateStillMatches(grouped)).toBe(false);
+  });
+
+  it("splits a consecutive run before the combined translation exceeds 5,000 characters", () => {
+    const row = document.createElement("div");
+    const first = document.createElement("div");
+    const second = document.createElement("div");
+    row.append(first, second);
+    document.body.append(row);
+    const candidates = [
+      { container: first, textElement: first, text: "a".repeat(3_000) },
+      { container: second, textElement: second, text: "b".repeat(2_000) }
+    ];
+
+    expect(groupConsecutiveIncomingMessages(candidates)).toEqual(candidates);
   });
 });

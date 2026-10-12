@@ -45,16 +45,21 @@ const PAGE_CHROME_SELECTOR = [
 ].join(",");
 const ZALO_MESSAGE_FRAME_SELECTOR = '[data-component="message-content-view"]';
 const ZALO_RECEIVED_TEXT_SELECTOR = '[data-id*="ReceivedMsg_Text"]';
+const MAX_GROUP_TEXT_LENGTH = 5_000;
 
 export interface IncomingMessageCandidate {
   container: HTMLElement;
   textElement: HTMLElement;
   text: string;
+  members?: IncomingMessageCandidate[];
 }
 
 export function incomingCandidateStillMatches(
   candidate: IncomingMessageCandidate
 ): boolean {
+  if (candidate.members) {
+    return candidate.members.every((member) => incomingCandidateStillMatches(member));
+  }
   if (!candidate.container.isConnected) return false;
 
   const currentText = normalizedText(candidate.container);
@@ -62,6 +67,93 @@ export function incomingCandidateStillMatches(
     .split("\n")
     .filter(Boolean)
     .every((line) => currentText.includes(line));
+}
+
+function explicitSender(candidate: IncomingMessageCandidate): string {
+  const sender = candidate.container.querySelector<HTMLElement>([
+    ".message-sender-name-content",
+    ".message-sender-name-wrapper",
+    "[class*='sender-name']",
+    "[class*='sender_name']",
+    "[data-sender-name]"
+  ].join(","));
+  return normalizedValue(
+    sender?.innerText ||
+    sender?.textContent ||
+    candidate.container.getAttribute("data-sender-name") ||
+    candidate.container.getAttribute("data-sender") ||
+    ""
+  ).toLocaleLowerCase();
+}
+
+function areAdjacentSiblings(left: Element, right: Element): boolean {
+  return left.parentElement === right.parentElement && left.nextElementSibling === right;
+}
+
+function shouldJoinIncomingCandidates(
+  previous: IncomingMessageCandidate,
+  current: IncomingMessageCandidate
+): boolean {
+  if (!areAdjacentSiblings(previous.container, current.container)) return false;
+
+  const previousSender = explicitSender(previous);
+  const currentSender = explicitSender(current);
+  if (previousSender && currentSender && previousSender !== currentSender) return false;
+  if (currentSender && !previousSender) return false;
+
+  const previousFrame = previous.container.matches(ZALO_MESSAGE_FRAME_SELECTOR);
+  const currentFrame = current.container.matches(ZALO_MESSAGE_FRAME_SELECTOR);
+  if (!previousFrame && !currentFrame) return true;
+  if (previousFrame !== currentFrame) return false;
+
+  if (previousSender && currentSender) return previousSender === currentSender;
+  return !previous.container.classList.contains("last-msg");
+}
+
+/**
+ * Collapses consecutive incoming bubbles from the same visible sender run into
+ * one translation candidate anchored to the final bubble. A file, system row,
+ * outgoing message, date separator, or another sender breaks DOM adjacency and
+ * therefore starts a new group.
+ */
+export function groupConsecutiveIncomingMessages(
+  candidates: IncomingMessageCandidate[]
+): IncomingMessageCandidate[] {
+  const ordered = [...candidates].sort((left, right) => {
+    if (left.container === right.container) return 0;
+    const position = left.container.compareDocumentPosition(right.container);
+    return position & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+  });
+  const groups: IncomingMessageCandidate[][] = [];
+  ordered.forEach((candidate) => {
+    const group = groups.at(-1);
+    const previous = group?.at(-1);
+    const groupedLength = group
+      ? group.reduce((total, item) => total + item.text.length, 0) +
+        Math.max(0, group.length - 1) * 2 + candidate.text.length + 2
+      : candidate.text.length;
+    if (
+      group &&
+      previous &&
+      groupedLength <= MAX_GROUP_TEXT_LENGTH &&
+      shouldJoinIncomingCandidates(previous, candidate)
+    ) {
+      group.push(candidate);
+    } else {
+      groups.push([candidate]);
+    }
+  });
+
+  return groups.map((group) => {
+    if (group.length === 1) return group[0]!;
+    const anchor = group.at(-1)!;
+    return {
+      container: anchor.container,
+      textElement: anchor.textElement,
+      text: group.map((candidate) => candidate.text).join("\n\n"),
+      members: group
+    };
+  });
 }
 
 function normalizedValue(value: string): string {

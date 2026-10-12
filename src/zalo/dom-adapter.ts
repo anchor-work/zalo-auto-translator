@@ -127,7 +127,10 @@ export function findSendButton(composer: HTMLElement): HTMLElement | null {
         candidate === composer ||
         composer.contains(candidate) ||
         candidate.hasAttribute("disabled") ||
-        candidate.getAttribute("aria-disabled") === "true"
+        candidate.getAttribute("aria-disabled") === "true" ||
+        candidate.closest("[aria-hidden='true']") ||
+        window.getComputedStyle(candidate).display === "none" ||
+        window.getComputedStyle(candidate).visibility === "hidden"
       ) continue;
 
       const labels = elementLabels(candidate);
@@ -176,25 +179,23 @@ export function findSendButton(composer: HTMLElement): HTMLElement | null {
   return bestMatch?.element ?? null;
 }
 
-function dispatchEnter(composer: HTMLElement): void {
-  const options: KeyboardEventInit = {
-    key: "Enter",
-    code: "Enter",
-    bubbles: true,
-    cancelable: true
-  };
-  ["keydown", "keypress", "keyup"].forEach((type) => {
-    const event = new KeyboardEvent(type, options);
-    Object.defineProperties(event, {
-      keyCode: { get: () => 13 },
-      which: { get: () => 13 }
-    });
-    composer.dispatchEvent(event);
-  });
-}
-
 const delay = (milliseconds: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+
+async function waitForSendButton(
+  composer: HTMLElement,
+  timeoutMs: number
+): Promise<HTMLElement | null> {
+  const deadline = Date.now() + timeoutMs;
+  do {
+    if (!document.contains(composer)) return null;
+    const sendButton = findSendButton(composer);
+    if (sendButton) return sendButton;
+    if (timeoutMs === 0) break;
+    await delay(50);
+  } while (Date.now() < deadline);
+  return findSendButton(composer);
+}
 
 async function waitForComposerCleared(
   composer: HTMLElement,
@@ -212,17 +213,14 @@ async function waitForComposerCleared(
 export async function sendComposer(
   composer: HTMLElement,
   text: string,
-  confirmationDelayMs = 1_600
+  confirmationDelayMs = 2_400,
+  sendButtonWaitMs = 1_200
 ): Promise<boolean> {
   writeComposer(composer, text);
 
-  await delay(confirmationDelayMs === 0 ? 0 : 120);
-  const sendButton = findSendButton(composer);
-  if (sendButton) {
-    sendButton.click();
-    if (await waitForComposerCleared(composer, confirmationDelayMs)) return true;
-  }
+  const sendButton = await waitForSendButton(composer, sendButtonWaitMs);
+  if (!sendButton) return false;
 
-  dispatchEnter(composer);
-  return waitForComposerCleared(composer, confirmationDelayMs === 0 ? 0 : 800);
+  sendButton.click();
+  return waitForComposerCleared(composer, confirmationDelayMs);
 }

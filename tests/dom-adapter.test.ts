@@ -88,6 +88,19 @@ describe("Zalo DOM adapter", () => {
     expect(findSendButton(composer)).toBe(sendButton);
   });
 
+  it("ignores a hidden send control", () => {
+    const wrapper = document.createElement("div");
+    const composer = document.createElement("div");
+    composer.contentEditable = "true";
+    const sendButton = document.createElement("button");
+    sendButton.setAttribute("aria-label", "Gửi");
+    sendButton.style.display = "none";
+    wrapper.append(composer, sendButton);
+    document.body.append(wrapper);
+
+    expect(findSendButton(composer)).toBeNull();
+  });
+
   it("writes translated text and confirms a send when the composer clears", async () => {
     const form = document.createElement("form");
     const composer = document.createElement("div");
@@ -100,5 +113,51 @@ describe("Zalo DOM adapter", () => {
     document.body.append(form);
 
     await expect(sendComposer(composer, "Xin chào!", 0)).resolves.toBe(true);
+  });
+
+  it("waits for Zalo to render an enabled send button after text insertion", async () => {
+    const wrapper = document.createElement("div");
+    const composer = document.createElement("div");
+    composer.contentEditable = "true";
+    wrapper.append(composer);
+    document.body.append(wrapper);
+
+    setTimeout(() => {
+      const sendButton = document.createElement("button");
+      sendButton.setAttribute("aria-label", "Gửi");
+      sendButton.addEventListener("click", () => composer.replaceChildren());
+      wrapper.append(sendButton);
+    }, 10);
+
+    await expect(sendComposer(composer, "Xin chào!", 0, 200)).resolves.toBe(true);
+  });
+
+  it("keeps the translated text for manual sending when no send button appears", async () => {
+    const composer = document.createElement("div");
+    composer.contentEditable = "true";
+    document.body.append(composer);
+    const enterEvents = vi.fn();
+    composer.addEventListener("keydown", enterEvents);
+
+    await expect(sendComposer(composer, "Xin chào!", 0, 0)).resolves.toBe(false);
+    expect(readComposer(composer)).toBe("Xin chào!");
+    expect(enterEvents).not.toHaveBeenCalled();
+  });
+
+  it("clicks the send button only once when Zalo does not confirm the send", async () => {
+    const wrapper = document.createElement("div");
+    const composer = document.createElement("div");
+    composer.contentEditable = "true";
+    const sendButton = document.createElement("button");
+    sendButton.type = "button";
+    sendButton.setAttribute("aria-label", "Gửi");
+    const click = vi.fn();
+    sendButton.addEventListener("click", click);
+    wrapper.append(composer, sendButton);
+    document.body.append(wrapper);
+
+    await expect(sendComposer(composer, "Xin chào!", 0, 0)).resolves.toBe(false);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(readComposer(composer)).toBe("Xin chào!");
   });
 });
