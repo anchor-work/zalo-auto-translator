@@ -59,6 +59,10 @@ function replaceContentSafely(composer: HTMLElement, text: string): void {
 }
 
 export function writeComposer(composer: HTMLElement, text: string): void {
+  const isZaloRichInput = composer.id === "richInput" && composer.classList.contains("rich-input");
+  if (isZaloRichInput && composer.getAttribute("contenteditable") === "false") {
+    composer.setAttribute("contenteditable", "true");
+  }
   composer.click();
   composer.focus();
 

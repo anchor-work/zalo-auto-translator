@@ -65,6 +65,23 @@ describe("Zalo DOM adapter", () => {
     expect(findVisibleComposers()).toEqual([composer]);
   });
 
+  it("reactivates and writes to Zalo richInput after the translation panel took focus", () => {
+    const composer = document.createElement("div");
+    composer.id = "richInput";
+    composer.className = "rich-input empty";
+    composer.contentEditable = "false";
+    composer.append(document.createElement("br"));
+    document.body.append(composer);
+    const input = vi.fn();
+    composer.addEventListener("input", input);
+
+    writeComposer(composer, "Cảm ơn em nhé.");
+
+    expect(composer.getAttribute("contenteditable")).toBe("true");
+    expect(readComposer(composer)).toBe("Cảm ơn em nhé.");
+    expect(input).toHaveBeenCalledOnce();
+  });
+
   it("reads and writes a textarea composer", () => {
     const composer = document.createElement("textarea");
     composer.value = "기존 메시지";
