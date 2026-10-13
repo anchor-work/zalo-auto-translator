@@ -3,6 +3,7 @@ import {
   PLAN_LIMITS,
   billingPeriod,
   nextResetAt,
+  planFor,
   usageSummary
 } from "../apps/api/src/usage.mjs";
 
@@ -32,5 +33,13 @@ describe("monthly account usage", () => {
     expect(summary.limits.outgoing.requests).toBe(30);
     expect(summary.limits.outgoing.characters).toBe(3_000);
     expect(summary.limits.incoming_auto.requests).toBe(0);
+  });
+
+  it("only grants Pro limits for the explicit pro plan", () => {
+    expect(planFor("pro")).toBe("pro");
+    expect(planFor("free")).toBe("free");
+    expect(planFor("enterprise")).toBe("free");
+    expect(planFor(undefined)).toBe("free");
+    expect(PLAN_LIMITS.pro.incoming_auto.requests).toBeGreaterThan(0);
   });
 });

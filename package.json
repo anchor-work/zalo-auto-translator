@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "api:dev": "node --use-env-proxy --env-file-if-exists=apps/api/.env.local --watch apps/api/src/server.mjs",
     "api:start": "node --use-env-proxy --env-file-if-exists=apps/api/.env.local apps/api/src/server.mjs",
+    "account:set-plan": "node apps/api/scripts/set-user-plan.mjs",
     "postinstall": "wxt prepare"
   },
   "devDependencies": {

@@ -39,7 +39,7 @@ function number(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function planFor(value) {
+export function planFor(value) {
   return value === "pro" ? "pro" : "free";
 }
 
@@ -102,16 +102,16 @@ export function createFirestoreUsageStore({ db = firestoreInstance(), now = () =
     if (existing?.status === "suspended") {
       throw new TranslationError("사용이 중지된 계정입니다.", 403, "account_suspended");
     }
-    return { userRef, userSnapshot, plan };
+    return { userRef, userSnapshot, plan, status: existing?.status || "active" };
   }
 
-  function writeUser(transaction, identity, userRef, userSnapshot, plan) {
+  function writeUser(transaction, identity, userRef, userSnapshot, plan, status) {
     const timestamp = FieldValue.serverTimestamp();
     transaction.set(userRef, {
       email: identity.email || "",
       displayName: identity.name || "",
       plan,
-      status: "active",
+      status,
       ...(userSnapshot.exists ? {} : { createdAt: timestamp }),
       updatedAt: timestamp,
       lastSeenAt: timestamp
@@ -123,7 +123,7 @@ export function createFirestoreUsageStore({ db = firestoreInstance(), now = () =
       const date = now();
       const period = billingPeriod(date);
       return db.runTransaction(async (transaction) => {
-        const { userRef, userSnapshot, plan } = await readUser(transaction, identity);
+        const { userRef, userSnapshot, plan, status } = await readUser(transaction, identity);
         const usageRef = userRef.collection("usage").doc(period);
         const usageSnapshot = await transaction.get(usageRef);
         const data = usageSnapshot.data() || {};
@@ -136,7 +136,7 @@ export function createFirestoreUsageStore({ db = firestoreInstance(), now = () =
           [`${prefix}Characters`]: current.characters + characters,
           updatedAt: FieldValue.serverTimestamp()
         };
-        writeUser(transaction, identity, userRef, userSnapshot, plan);
+        writeUser(transaction, identity, userRef, userSnapshot, plan, status);
         transaction.set(usageRef, updated, { merge: true });
         return {
           uid: identity.uid,
@@ -195,9 +195,9 @@ export function createFirestoreUsageStore({ db = firestoreInstance(), now = () =
       const date = now();
       const period = billingPeriod(date);
       return db.runTransaction(async (transaction) => {
-        const { userRef, userSnapshot, plan } = await readUser(transaction, identity);
+        const { userRef, userSnapshot, plan, status } = await readUser(transaction, identity);
         const snapshot = await transaction.get(userRef.collection("usage").doc(period));
-        writeUser(transaction, identity, userRef, userSnapshot, plan);
+        writeUser(transaction, identity, userRef, userSnapshot, plan, status);
         return usageSummary(plan, period, snapshot.data() || {}, date);
       });
     }

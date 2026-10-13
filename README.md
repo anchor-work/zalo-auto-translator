@@ -124,6 +124,8 @@ API 키는 백엔드에서만 읽으며 확장프로그램 번들에 포함되�
 Cloud Run과 GitHub Actions의 최초 1회 설정은
 [Cloud Run 자동 배포 안내](docs/cloud-run-setup.md)를 따릅니다. 백엔드 관련 파일이
 `main` 브랜치에 반영되면 테스트 성공 후 새 Cloud Run 리비전이 자동 배포됩니다.
+결제 연동 전 Free/Pro 계정 전환과 검증 절차는
+[요금제 운영 안내](docs/plan-operations.md)를 따릅니다.
 
 Chrome 웹 스토어 미등록 테스트의 패키지, 등록 문구와 업로드 순서는
 [스토어 등록 안내](store/README.md)를 따릅니다. 개인정보처리방침은 GitHub Pages로
