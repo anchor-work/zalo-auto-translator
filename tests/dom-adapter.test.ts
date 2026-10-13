@@ -82,17 +82,13 @@ describe("Zalo DOM adapter", () => {
     expect(input).toHaveBeenCalledOnce();
   });
 
-  it("uses the browser native editing command after reactivating Zalo richInput", () => {
+  it("does not use selection APIs for Zalo richInput", () => {
     const composer = document.createElement("div");
     composer.id = "richInput";
     composer.className = "rich-input empty";
     composer.contentEditable = "false";
     document.body.append(composer);
-    const execCommand = vi.fn(() => {
-      expect(composer.getAttribute("contenteditable")).toBe("true");
-      composer.textContent = "Đã nhập";
-      return true;
-    });
+    const execCommand = vi.fn();
     Object.defineProperty(document, "execCommand", {
       configurable: true,
       value: execCommand
@@ -100,8 +96,9 @@ describe("Zalo DOM adapter", () => {
 
     writeComposer(composer, "Đã nhập");
 
-    expect(execCommand).toHaveBeenCalledWith("insertText", false, "Đã nhập");
+    expect(execCommand).not.toHaveBeenCalled();
     expect(readComposer(composer)).toBe("Đã nhập");
+    expect(composer.classList.contains("empty")).toBe(false);
     Reflect.deleteProperty(document, "execCommand");
   });
 

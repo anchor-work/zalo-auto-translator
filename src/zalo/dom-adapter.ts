@@ -73,6 +73,19 @@ export function writeComposer(composer: HTMLElement, text: string): HTMLElement 
   composer.focus();
   composer = currentComposer(composer);
 
+  if (isZaloRichInput) {
+    replaceContentSafely(composer, text);
+    composer.classList.toggle("empty", text.length === 0);
+    composer.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: text
+      })
+    );
+    return composer;
+  }
+
   if (composer instanceof HTMLTextAreaElement) {
     const valueSetter = Object.getOwnPropertyDescriptor(
       HTMLTextAreaElement.prototype,
