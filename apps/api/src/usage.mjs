@@ -4,7 +4,7 @@ import { TranslationError } from "./gemini.mjs";
 
 export const PLAN_LIMITS = {
   free: {
-    outgoing: { requests: 30, characters: 10_000, perRequestCharacters: 1_000 },
+    outgoing: { requests: 30, characters: 3_000, perRequestCharacters: 1_000 },
     incoming_manual: { requests: 30, characters: 5_000, perRequestCharacters: 5_000 },
     incoming_auto: { requests: 0, characters: 0, perRequestCharacters: 0 }
   },
