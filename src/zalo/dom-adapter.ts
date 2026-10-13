@@ -60,10 +60,8 @@ function replaceContentSafely(composer: HTMLElement, text: string): void {
 
 export function writeComposer(composer: HTMLElement, text: string): void {
   const isZaloRichInput = composer.id === "richInput" && composer.classList.contains("rich-input");
-  if (isZaloRichInput && composer.getAttribute("contenteditable") === "false") {
-    composer.setAttribute("contenteditable", "true");
-  }
   composer.click();
+  if (isZaloRichInput) composer.setAttribute("contenteditable", "true");
   composer.focus();
 
   if (composer instanceof HTMLTextAreaElement) {
@@ -91,30 +89,20 @@ export function writeComposer(composer: HTMLElement, text: string): void {
   selection?.removeAllRanges();
   selection?.addRange(range);
 
-  const beforeInput = new InputEvent("beforeinput", {
-    bubbles: true,
-    cancelable: true,
-    inputType: "insertText",
-    data: text
-  });
-  composer.dispatchEvent(beforeInput);
-
   const inserted =
     typeof document.execCommand === "function" &&
     document.execCommand("insertText", false, text);
 
   if (!inserted) {
     replaceContentSafely(composer, text);
+    composer.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: text
+      })
+    );
   }
-
-  composer.dispatchEvent(
-    new InputEvent("input", {
-      bubbles: true,
-      inputType: "insertText",
-      data: text
-    })
-  );
-  composer.dispatchEvent(new Event("change", { bubbles: true }));
 
   const endRange = document.createRange();
   endRange.selectNodeContents(composer);

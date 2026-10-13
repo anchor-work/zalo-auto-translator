@@ -82,6 +82,29 @@ describe("Zalo DOM adapter", () => {
     expect(input).toHaveBeenCalledOnce();
   });
 
+  it("uses the browser native editing command after reactivating Zalo richInput", () => {
+    const composer = document.createElement("div");
+    composer.id = "richInput";
+    composer.className = "rich-input empty";
+    composer.contentEditable = "false";
+    document.body.append(composer);
+    const execCommand = vi.fn(() => {
+      expect(composer.getAttribute("contenteditable")).toBe("true");
+      composer.textContent = "Đã nhập";
+      return true;
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand
+    });
+
+    writeComposer(composer, "Đã nhập");
+
+    expect(execCommand).toHaveBeenCalledWith("insertText", false, "Đã nhập");
+    expect(readComposer(composer)).toBe("Đã nhập");
+    Reflect.deleteProperty(document, "execCommand");
+  });
+
   it("reads and writes a textarea composer", () => {
     const composer = document.createElement("textarea");
     composer.value = "기존 메시지";
