@@ -27,6 +27,7 @@ import type {
 } from "../../src/types";
 import {
   findComposerFromFocus,
+  findVisibleComposers,
   isUsableComposer,
   sendComposer
 } from "../../src/zalo/dom-adapter";
@@ -463,6 +464,11 @@ export default defineContentScript({
 
     const getActiveComposer = (): HTMLElement | null => {
       if (activeComposer && isUsableComposer(activeComposer)) return activeComposer;
+      const visibleComposers = findVisibleComposers();
+      if (visibleComposers.length === 1) {
+        activeComposer = visibleComposers[0]!;
+        return activeComposer;
+      }
       setStatus(t("composerRequired"), "error");
       return null;
     };

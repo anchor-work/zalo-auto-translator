@@ -1,4 +1,5 @@
-const EDITABLE_SELECTOR = '[contenteditable="true"]';
+const EDITABLE_SELECTOR =
+  'textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"][contenteditable]';
 const SEND_LABEL = /^(send|send message|gửi|gửi tin nhắn|전송|보내기)$/i;
 const SEND_LABEL_CONTAINS = /(send|gửi|전송|보내기)/i;
 const SEND_ATTRIBUTE_HINT = /(send|submit|sent[-_]?msg|btn[-_]?send|gửi|gui)/i;
@@ -28,8 +29,16 @@ export function findComposerFromFocus(target: EventTarget | null): HTMLElement |
   return isUsableComposer(candidate) ? candidate : null;
 }
 
+export function findVisibleComposers(root: ParentNode = document): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(EDITABLE_SELECTOR)).filter(
+    (candidate) =>
+      !candidate.closest("#zalo-auto-translator-root") && isUsableComposer(candidate)
+  );
+}
+
 export function readComposer(composer: HTMLElement): string {
-  return (composer.innerText || composer.textContent || "")
+  const text = composer instanceof HTMLTextAreaElement ? composer.value : composer.innerText || composer.textContent || "";
+  return text
     .replace(/\u00a0/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -51,6 +60,25 @@ function replaceContentSafely(composer: HTMLElement, text: string): void {
 
 export function writeComposer(composer: HTMLElement, text: string): void {
   composer.focus();
+
+  if (composer instanceof HTMLTextAreaElement) {
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value"
+    )?.set;
+    valueSetter?.call(composer, text);
+    if (!valueSetter) composer.value = text;
+    composer.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: text
+      })
+    );
+    composer.dispatchEvent(new Event("change", { bubbles: true }));
+    composer.setSelectionRange(text.length, text.length);
+    return;
+  }
 
   const selection = window.getSelection();
   const range = document.createRange();

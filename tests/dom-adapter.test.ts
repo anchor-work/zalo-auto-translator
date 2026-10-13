@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   findSendButton,
   findComposerFromFocus,
+  findVisibleComposers,
   readComposer,
   sendComposer,
   writeComposer
@@ -33,6 +34,29 @@ describe("Zalo DOM adapter", () => {
     });
 
     expect(findComposerFromFocus(child)).toBe(composer);
+  });
+
+  it("recognizes Zalo plaintext-only editors", () => {
+    const composer = document.createElement("div");
+    composer.setAttribute("contenteditable", "plaintext-only");
+    document.body.append(composer);
+    vi.spyOn(composer, "getBoundingClientRect").mockReturnValue({
+      width: 300, height: 40, top: 0, right: 300, bottom: 40, left: 0, x: 0, y: 0,
+      toJSON: () => ({})
+    });
+
+    expect(findComposerFromFocus(composer)).toBe(composer);
+    expect(findVisibleComposers()).toEqual([composer]);
+  });
+
+  it("reads and writes a textarea composer", () => {
+    const composer = document.createElement("textarea");
+    composer.value = "기존 메시지";
+    document.body.append(composer);
+
+    expect(readComposer(composer)).toBe("기존 메시지");
+    writeComposer(composer, "Xin chào!");
+    expect(composer.value).toBe("Xin chào!");
   });
 
   it("reads and safely replaces composer text", () => {
