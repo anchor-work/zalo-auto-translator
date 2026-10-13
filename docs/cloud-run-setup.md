@@ -144,6 +144,17 @@ gcloud iam workload-identity-pools providers describe github-provider \
 
 ## 6. 최초 배포
 
+결제 기능을 사용하는 배포에서는 Secret Manager에 다음 보안 비밀도 생성합니다.
+
+| Secret | 값 |
+| --- | --- |
+| `POLAR_ACCESS_TOKEN` | Polar organization access token |
+| `POLAR_WEBHOOK_SECRET` | Polar webhook signing secret (`whsec_...`) |
+
+Cloud Run 런타임 서비스 계정에는 두 보안 비밀에 대한
+`Secret Manager 보안 비밀 접근자` 역할이 필요합니다. Polar 웹훅 URL은
+`/v1/billing/polar/webhook`이며, API 버전 `2026-10`의 Raw 형식을 사용합니다.
+
 GitHub 저장소의 **Actions → Deploy translation API to Cloud Run → Run workflow**를
 선택합니다. 이후 `main` 브랜치에서 백엔드 관련 파일이 변경되면 같은 워크플로가 자동
 실행됩니다.
