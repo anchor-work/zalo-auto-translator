@@ -1,5 +1,5 @@
 const EDITABLE_SELECTOR =
-  'textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"][contenteditable]';
+  '#richInput.rich-input, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"][contenteditable]';
 const SEND_LABEL = /^(send|send message|gửi|gửi tin nhắn|전송|보내기)$/i;
 const SEND_LABEL_CONTAINS = /(send|gửi|전송|보내기)/i;
 const SEND_ATTRIBUTE_HINT = /(send|submit|sent[-_]?msg|btn[-_]?send|gửi|gui)/i;
@@ -59,6 +59,7 @@ function replaceContentSafely(composer: HTMLElement, text: string): void {
 }
 
 export function writeComposer(composer: HTMLElement, text: string): void {
+  composer.click();
   composer.focus();
 
   if (composer instanceof HTMLTextAreaElement) {

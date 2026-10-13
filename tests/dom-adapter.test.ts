@@ -49,6 +49,22 @@ describe("Zalo DOM adapter", () => {
     expect(findVisibleComposers()).toEqual([composer]);
   });
 
+  it("recognizes Zalo richInput even while Zalo marks it contenteditable false", () => {
+    const composer = document.createElement("div");
+    composer.id = "richInput";
+    composer.className = "rich-input empty";
+    composer.contentEditable = "false";
+    composer.tabIndex = 1;
+    document.body.append(composer);
+    vi.spyOn(composer, "getBoundingClientRect").mockReturnValue({
+      width: 500, height: 44, top: 600, right: 700, bottom: 644, left: 200, x: 200, y: 600,
+      toJSON: () => ({})
+    });
+
+    expect(findComposerFromFocus(composer)).toBe(composer);
+    expect(findVisibleComposers()).toEqual([composer]);
+  });
+
   it("reads and writes a textarea composer", () => {
     const composer = document.createElement("textarea");
     composer.value = "기존 메시지";
