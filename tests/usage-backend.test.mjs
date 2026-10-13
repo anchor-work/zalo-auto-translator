@@ -29,6 +29,8 @@ describe("monthly account usage", () => {
     expect(summary.used.outgoing).toEqual({ requests: 3, characters: 700 });
     expect(summary.used.incoming_manual).toEqual({ requests: 2, characters: 400 });
     expect(summary.limits.outgoing).toEqual(PLAN_LIMITS.free.outgoing);
+    expect(summary.limits.outgoing.requests).toBe(30);
+    expect(summary.limits.outgoing.characters).toBe(10_000);
     expect(summary.limits.incoming_auto.requests).toBe(0);
   });
 });
