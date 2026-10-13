@@ -236,6 +236,42 @@ select {
   color: #31577d;
 }
 
+.upgrade-card {
+  background: linear-gradient(145deg, #edf4ff, #f7f9ff);
+  border: 1px solid #c9daf8;
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.upgrade-card.near-limit {
+  background: #fff8e8;
+  border-color: #e8c66c;
+}
+
+.upgrade-card.exhausted {
+  background: #fff1f1;
+  border-color: #efb4b4;
+}
+
+.upgrade-card p {
+  color: #536176;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.upgrade-card a {
+  background: #2867e8;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 9px 11px;
+  text-align: center;
+  text-decoration: none;
+}
+
 dl {
   display: grid;
   gap: 8px;

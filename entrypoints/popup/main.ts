@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import { browserLanguage, languageName, uiText } from "../../src/i18n";
+import { freeUsageState } from "../../src/account-usage";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import type {
   BackgroundMessage,
@@ -76,6 +77,19 @@ function renderUsage(): void {
   element("reset-at").textContent = accountUsage
     ? new Date(accountUsage.resetAt).toLocaleDateString(uiLanguage)
     : "-";
+  const upgradeCard = element<HTMLElement>("upgrade-card");
+  const usageState = freeUsageState(accountUsage);
+  upgradeCard.hidden = usageState === "unavailable" || usageState === "pro";
+  upgradeCard.classList.toggle("near-limit", usageState === "near_limit");
+  upgradeCard.classList.toggle("exhausted", usageState === "exhausted");
+  element("upgrade-description").textContent = uiText(
+    uiLanguage,
+    usageState === "exhausted"
+      ? "upgradeExhausted"
+      : usageState === "near_limit"
+        ? "upgradeNearLimit"
+        : "upgradeDescription"
+  );
 }
 
 function renderCopy(): void {
@@ -106,6 +120,8 @@ function renderCopy(): void {
   element("outgoing-usage-label").textContent = uiText(uiLanguage, "outgoingUsage");
   element("incoming-usage-label").textContent = uiText(uiLanguage, "incomingUsage");
   element("reset-at-label").textContent = uiText(uiLanguage, "resetAt");
+  element("upgrade-title").textContent = uiText(uiLanguage, "upgradeTitle");
+  element("upgrade-link").textContent = uiText(uiLanguage, "upgradeAction");
   start.textContent = uiText(uiLanguage, "start");
   renderUsage();
 }
