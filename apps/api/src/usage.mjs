@@ -23,7 +23,8 @@ const FIELD_PREFIX = {
 
 function firestoreInstance() {
   const app = getApps()[0] || initializeApp();
-  return getFirestore(app);
+  const databaseId = process.env.ZALO_FIRESTORE_DATABASE_ID?.trim();
+  return databaseId ? getFirestore(app, databaseId) : getFirestore(app);
 }
 
 export function billingPeriod(date = new Date()) {
