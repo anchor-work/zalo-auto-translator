@@ -105,6 +105,25 @@ describe("Zalo DOM adapter", () => {
     Reflect.deleteProperty(document, "execCommand");
   });
 
+  it("continues with the current richInput when Zalo replaces it on activation", () => {
+    const chatInput = document.createElement("div");
+    chatInput.id = "chatInput";
+    const original = document.createElement("div");
+    original.id = "richInput";
+    original.className = "rich-input empty";
+    original.contentEditable = "false";
+    chatInput.append(original);
+    document.body.append(chatInput);
+
+    const replacement = original.cloneNode(true) as HTMLElement;
+    original.addEventListener("click", () => original.replaceWith(replacement));
+
+    const writtenComposer = writeComposer(original, "Tin nhắn mới");
+
+    expect(writtenComposer).toBe(replacement);
+    expect(readComposer(replacement)).toBe("Tin nhắn mới");
+  });
+
   it("reads and writes a textarea composer", () => {
     const composer = document.createElement("textarea");
     composer.value = "기존 메시지";

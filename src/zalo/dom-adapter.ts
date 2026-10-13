@@ -58,11 +58,20 @@ function replaceContentSafely(composer: HTMLElement, text: string): void {
   composer.replaceChildren(fragment);
 }
 
-export function writeComposer(composer: HTMLElement, text: string): void {
+function currentComposer(composer: HTMLElement): HTMLElement {
+  if (composer.id !== "richInput" || !composer.classList.contains("rich-input")) {
+    return composer;
+  }
+  return document.querySelector<HTMLElement>("#chatInput #richInput.rich-input") ?? composer;
+}
+
+export function writeComposer(composer: HTMLElement, text: string): HTMLElement {
   const isZaloRichInput = composer.id === "richInput" && composer.classList.contains("rich-input");
   composer.click();
+  composer = currentComposer(composer);
   if (isZaloRichInput) composer.setAttribute("contenteditable", "true");
   composer.focus();
+  composer = currentComposer(composer);
 
   if (composer instanceof HTMLTextAreaElement) {
     const valueSetter = Object.getOwnPropertyDescriptor(
@@ -80,14 +89,19 @@ export function writeComposer(composer: HTMLElement, text: string): void {
     );
     composer.dispatchEvent(new Event("change", { bubbles: true }));
     composer.setSelectionRange(text.length, text.length);
-    return;
+    return composer;
   }
 
   const selection = window.getSelection();
   const range = document.createRange();
   range.selectNodeContents(composer);
-  selection?.removeAllRanges();
-  selection?.addRange(range);
+  try {
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  } catch {
+    // Zalo can replace richInput while focus is moving. The fallback below still
+    // writes to the latest connected element and emits the input event.
+  }
 
   const inserted =
     typeof document.execCommand === "function" &&
@@ -106,9 +120,14 @@ export function writeComposer(composer: HTMLElement, text: string): void {
 
   const endRange = document.createRange();
   endRange.selectNodeContents(composer);
-  endRange.collapse(false);
-  selection?.removeAllRanges();
-  selection?.addRange(endRange);
+  try {
+    endRange.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(endRange);
+  } catch {
+    // Keeping the text is more important than restoring a caret on a replaced node.
+  }
+  return composer;
 }
 
 function elementLabels(element: Element): string[] {
@@ -237,7 +256,7 @@ export async function sendComposer(
   confirmationDelayMs = 2_400,
   sendButtonWaitMs = 1_200
 ): Promise<boolean> {
-  writeComposer(composer, text);
+  composer = writeComposer(composer, text);
 
   const sendButton = await waitForSendButton(composer, sendButtonWaitMs);
   if (!sendButton) return false;
