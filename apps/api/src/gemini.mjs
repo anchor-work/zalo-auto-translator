@@ -6,6 +6,7 @@ const TARGET_LANGUAGES = new Set(["ko", "vi", "en"]);
 const PARTICIPANT_GENDERS = new Set(["male", "female", "unknown"]);
 const RELATIVE_AGES = new Set(["older", "same", "younger", "unknown"]);
 const RELATIONSHIPS = new Set(["unknown", "friend", "coworker", "customer", "group"]);
+const TRANSLATION_TYPES = new Set(["outgoing", "incoming_manual", "incoming_auto"]);
 const LANGUAGE_NAMES = {
   auto: "the automatically detected source language",
   ko: "Korean",
@@ -88,6 +89,10 @@ export function validateTranslationRequest(value) {
   if (!Object.hasOwn(VIETNAMESE_ADDRESS_INSTRUCTIONS, vietnameseAddress)) {
     throw new TranslationError("지원하지 않는 베트남어 호칭 설정입니다.", 400, "unsupported_address");
   }
+  const translationType = value.translationType ?? "outgoing";
+  if (!TRANSLATION_TYPES.has(translationType)) {
+    throw new TranslationError("지원하지 않는 번역 요청 유형입니다.", 400, "unsupported_translation_type");
+  }
   let socialContext;
   if (value.socialContext !== undefined) {
     const context = value.socialContext;
@@ -120,6 +125,7 @@ export function validateTranslationRequest(value) {
     tone: value.tone,
     vietnameseAddress,
     socialContext,
+    translationType,
     requestId:
       typeof value.requestId === "string" && value.requestId.length <= 128
         ? value.requestId

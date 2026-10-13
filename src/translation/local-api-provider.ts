@@ -1,15 +1,17 @@
-import type { TranslationRequest, TranslationResult } from "../types";
+import type { AccountUsage, TranslationRequest, TranslationResult } from "../types";
 import { validateApiBaseUrl } from "../settings";
 
 interface LocalApiResponse {
   translatedText?: unknown;
   usage?: { inputCharacters?: unknown };
+  account?: AccountUsage;
   error?: { message?: unknown };
 }
 
 export async function translateWithLocalApi(
   request: TranslationRequest,
-  baseUrl: string
+  baseUrl: string,
+  idToken?: string | null
 ): Promise<TranslationResult> {
   const safeBaseUrl = validateApiBaseUrl(baseUrl);
   const controller = new AbortController();
@@ -18,7 +20,10 @@ export async function translateWithLocalApi(
   try {
     const response = await fetch(`${safeBaseUrl}/v1/translations`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
+      },
       body: JSON.stringify(request),
       signal: controller.signal
     });
@@ -45,7 +50,8 @@ export async function translateWithLocalApi(
     return {
       translatedText: body.translatedText,
       provider: "local-api",
-      inputCharacters
+      inputCharacters,
+      account: body.account
     };
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -60,4 +66,25 @@ export async function translateWithLocalApi(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function getAccountUsage(
+  baseUrl: string,
+  idToken: string
+): Promise<AccountUsage> {
+  const safeBaseUrl = validateApiBaseUrl(baseUrl);
+  const response = await fetch(`${safeBaseUrl}/v1/account`, {
+    headers: { Authorization: `Bearer ${idToken}` }
+  });
+  const body = (await response.json()) as AccountUsage & {
+    error?: { message?: unknown };
+  };
+  if (!response.ok) {
+    throw new Error(
+      typeof body.error?.message === "string"
+        ? body.error.message
+        : `사용량 API 오류 (${response.status})`
+    );
+  }
+  return body;
 }

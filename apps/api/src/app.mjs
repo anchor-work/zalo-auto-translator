@@ -4,6 +4,8 @@ import {
   translateWithGemini,
   validateTranslationRequest
 } from "./gemini.mjs";
+import { bearerToken, verifyFirebaseIdToken } from "./auth.mjs";
+import { createFirestoreUsageStore } from "./usage.mjs";
 
 const MAX_BODY_BYTES = 20_000;
 
@@ -41,7 +43,13 @@ async function readJson(request) {
   }
 }
 
-export function createApiServer({ translate = translateWithGemini, logger = console } = {}) {
+export function createApiServer({
+  translate = translateWithGemini,
+  logger = console,
+  verifyToken = verifyFirebaseIdToken,
+  usageStore = createFirestoreUsageStore(),
+  requireAuth = process.env.ZALO_REQUIRE_AUTH === "true"
+} = {}) {
   return createServer(async (request, response) => {
     const requestUrl = new URL(request.url || "/", "http://localhost");
     const origin = allowedOrigin(request.headers.origin);
@@ -50,7 +58,7 @@ export function createApiServer({ translate = translateWithGemini, logger = cons
       response.statusCode = 204;
       if (origin) response.setHeader("Access-Control-Allow-Origin", origin);
       response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
       response.setHeader("Access-Control-Max-Age", "600");
       response.end();
       return;
@@ -61,7 +69,10 @@ export function createApiServer({ translate = translateWithGemini, logger = cons
       return;
     }
 
-    if (request.method !== "POST" || requestUrl.pathname !== "/v1/translations") {
+    const accountRequest = request.method === "GET" && requestUrl.pathname === "/v1/account";
+    const translationRequest =
+      request.method === "POST" && requestUrl.pathname === "/v1/translations";
+    if (!accountRequest && !translationRequest) {
       sendJson(response, 404, { error: { code: "not_found", message: "요청 경로를 찾을 수 없습니다." } }, origin);
       return;
     }
@@ -69,13 +80,64 @@ export function createApiServer({ translate = translateWithGemini, logger = cons
     const startedAt = performance.now();
     let requestId = "unknown";
     let inputCharacters = 0;
+    let reservation;
 
     try {
+      const token = bearerToken(request.headers.authorization);
+      if (!token && (requireAuth || accountRequest)) {
+        throw new TranslationError("로그인이 필요합니다.", 401, "auth_required");
+      }
+      let identity;
+      if (token) {
+        try {
+          identity = await verifyToken(token);
+        } catch {
+          throw new TranslationError(
+            "로그인 정보가 만료되었거나 올바르지 않습니다.",
+            401,
+            "invalid_auth_token"
+          );
+        }
+      }
+
+      if (accountRequest) {
+        const account = await usageStore.getSummary(identity);
+        sendJson(response, 200, account, origin);
+        return;
+      }
+
       const payload = validateTranslationRequest(await readJson(request));
       requestId = payload.requestId;
       inputCharacters = [...payload.text.normalize("NFC")].length;
-      const result = await translate(payload);
-      sendJson(response, 200, result, origin);
+      if (identity) {
+        reservation = await usageStore.reserve(
+          identity,
+          payload.translationType,
+          inputCharacters
+        );
+      }
+      let result;
+      try {
+        result = await translate(payload);
+      } catch (error) {
+        if (reservation) {
+          await usageStore.rollback(reservation).catch((rollbackError) => {
+            logger.error?.({ event: "usage_rollback_failed", requestId });
+          });
+        }
+        throw error;
+      }
+      if (reservation) {
+        await usageStore.commit(reservation, result.usage).catch(() => {
+          logger.error?.({ event: "usage_token_record_failed", requestId });
+        });
+      }
+      sendJson(
+        response,
+        200,
+        { ...result, ...(reservation ? { account: reservation.summary } : {}) },
+        origin
+      );
       logger.info?.({
         event: "translation_completed",
         requestId,

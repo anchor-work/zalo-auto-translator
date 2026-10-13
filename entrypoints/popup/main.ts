@@ -4,12 +4,12 @@ import { DEFAULT_SETTINGS } from "../../src/settings";
 import type {
   BackgroundMessage,
   BackgroundResponse,
-  DailyUsage,
+  AccountUsage,
+  AuthState,
   ExtensionSettings,
   TranslationLanguage,
   UserGender
 } from "../../src/types";
-import { localDateKey } from "../../src/usage";
 import "./style.css";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -20,6 +20,10 @@ function element<T extends HTMLElement>(id: string): T {
 
 const onboarding = element<HTMLElement>("onboarding");
 const settingsSection = element<HTMLElement>("settings");
+const authGate = element<HTMLElement>("auth-gate");
+const authHint = element<HTMLParagraphElement>("auth-hint");
+const signInButton = element<HTMLButtonElement>("sign-in");
+const signOutButton = element<HTMLButtonElement>("sign-out");
 const languageButtons = element<HTMLDivElement>("language-buttons");
 const onboardingTarget = element<HTMLSelectElement>("onboarding-target");
 const userLanguage = element<HTMLSelectElement>("user-language");
@@ -29,7 +33,8 @@ const enabled = element<HTMLInputElement>("enabled");
 const start = element<HTMLButtonElement>("start");
 const status = element<HTMLParagraphElement>("status");
 let loadedSettings: ExtensionSettings = { ...DEFAULT_SETTINGS };
-let usage: DailyUsage[] = [];
+let authState: AuthState = { configured: false, signedIn: false };
+let accountUsage: AccountUsage | null = null;
 let uiLanguage: TranslationLanguage = browserLanguage(browser.i18n.getUILanguage());
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let pendingSave: Partial<ExtensionSettings> = {};
@@ -52,10 +57,25 @@ function fillLanguageSelect(
 }
 
 function renderUsage(): void {
-  const today = usage.find((entry) => entry.date === localDateKey());
-  element("translations").textContent = `${today?.translations ?? 0}${uiText(uiLanguage, "times")}`;
-  element("characters").textContent = `${(today?.inputCharacters ?? 0).toLocaleString(uiLanguage)}${uiText(uiLanguage, "chars")}`;
-  element("errors").textContent = `${today?.errors ?? 0}${uiText(uiLanguage, "times")}`;
+  element("plan-value").textContent = accountUsage
+    ? uiText(uiLanguage, accountUsage.plan === "pro" ? "proPlan" : "freePlan")
+    : "-";
+  (["outgoing", "incoming_manual"] as const).forEach((type) => {
+    const id = type === "outgoing" ? "outgoing-usage" : "incoming-usage";
+    const used = accountUsage?.used[type];
+    const limit = accountUsage?.limits[type];
+    element(id).textContent = used && limit
+      ? uiText(uiLanguage, "usageValue", {
+          characters: used.characters.toLocaleString(uiLanguage),
+          characterLimit: limit.characters.toLocaleString(uiLanguage),
+          requests: used.requests.toLocaleString(uiLanguage),
+          requestLimit: limit.requests.toLocaleString(uiLanguage)
+        })
+      : "-";
+  });
+  element("reset-at").textContent = accountUsage
+    ? new Date(accountUsage.resetAt).toLocaleDateString(uiLanguage)
+    : "-";
 }
 
 function renderCopy(): void {
@@ -63,6 +83,11 @@ function renderCopy(): void {
   document.title = uiText(uiLanguage, "appName");
   element("app-name").textContent = uiText(uiLanguage, "appName");
   element("description").textContent = uiText(uiLanguage, "popupDescription");
+  element("sign-in-title").textContent = uiText(uiLanguage, "signInTitle");
+  element("sign-in-description").textContent = uiText(uiLanguage, "signInDescription");
+  element("signed-in-as").textContent = uiText(uiLanguage, "signedInAs");
+  signInButton.textContent = uiText(uiLanguage, "signInGoogle");
+  signOutButton.textContent = uiText(uiLanguage, "signOut");
   element("welcome-title").textContent = uiText(uiLanguage, "welcomeTitle");
   element("welcome-description").textContent = uiText(uiLanguage, "welcomeDescription");
   element("onboarding-language-label").textContent = uiText(uiLanguage, "languageSelector");
@@ -77,11 +102,30 @@ function renderCopy(): void {
   element("target-language-label").textContent = uiText(uiLanguage, "outgoingLanguage");
   element("language-hint").textContent = uiText(uiLanguage, "languageHint");
   element("usage-title").textContent = uiText(uiLanguage, "usageToday");
-  element("translations-label").textContent = uiText(uiLanguage, "translations");
-  element("characters-label").textContent = uiText(uiLanguage, "characters");
-  element("errors-label").textContent = uiText(uiLanguage, "errors");
+  element("plan-label").textContent = uiText(uiLanguage, "planLabel");
+  element("outgoing-usage-label").textContent = uiText(uiLanguage, "outgoingUsage");
+  element("incoming-usage-label").textContent = uiText(uiLanguage, "incomingUsage");
+  element("reset-at-label").textContent = uiText(uiLanguage, "resetAt");
   start.textContent = uiText(uiLanguage, "start");
   renderUsage();
+}
+
+function renderSections(): void {
+  const signedIn = authState.configured && authState.signedIn;
+  const setupComplete =
+    loadedSettings.languageSetupCompleted && Boolean(loadedSettings.userGender);
+  authGate.hidden = signedIn;
+  onboarding.hidden = !signedIn || setupComplete;
+  settingsSection.hidden = !signedIn || !setupComplete;
+  authHint.hidden = authState.configured;
+  authHint.textContent = authState.configured
+    ? ""
+    : uiText(uiLanguage, "authNotConfigured");
+  signInButton.disabled = !authState.configured;
+  element("account-email").textContent =
+    authState.configured && authState.signedIn
+      ? authState.user.email || authState.user.displayName
+      : "";
 }
 
 function renderSelectors(): void {
@@ -177,15 +221,49 @@ start.addEventListener("click", async () => {
       outgoingTargetLanguage: onboardingTarget.value as TranslationLanguage,
       languageSetupCompleted: true
     });
-    onboarding.hidden = true;
-    settingsSection.hidden = false;
     enabled.checked = loadedSettings.enabled;
     renderCopy();
     renderSelectors();
+    renderSections();
   } catch {
     status.textContent = uiText(uiLanguage, "saveFailed");
     status.className = "error";
   }
+});
+
+signInButton.addEventListener("click", async () => {
+  signInButton.disabled = true;
+  signInButton.textContent = uiText(uiLanguage, "signingIn");
+  status.textContent = "";
+  try {
+    const response = (await browser.runtime.sendMessage({
+      type: "sign-in"
+    } satisfies BackgroundMessage)) as BackgroundResponse<AuthState>;
+    if (!response.ok) throw new Error(response.error);
+    authState = response.data;
+    if (authState.configured && authState.signedIn) {
+      const usageResponse = (await browser.runtime.sendMessage({
+        type: "get-account-usage"
+      } satisfies BackgroundMessage)) as BackgroundResponse<AccountUsage>;
+      if (usageResponse.ok) accountUsage = usageResponse.data;
+    }
+    renderCopy();
+    renderSections();
+  } catch {
+    status.textContent = uiText(uiLanguage, "signInFailed");
+    status.className = "error";
+    signInButton.disabled = !authState.configured;
+    signInButton.textContent = uiText(uiLanguage, "signInGoogle");
+  }
+});
+
+signOutButton.addEventListener("click", async () => {
+  const response = (await browser.runtime.sendMessage({
+    type: "sign-out"
+  } satisfies BackgroundMessage)) as BackgroundResponse<AuthState>;
+  if (response.ok) authState = response.data;
+  accountUsage = null;
+  renderSections();
 });
 
 enabled.addEventListener("change", () => scheduleSave({ enabled: enabled.checked }));
@@ -207,12 +285,21 @@ targetLanguage.addEventListener("change", () => {
 });
 
 async function load(): Promise<void> {
-  const [settingsResponse, usageResponse] = (await Promise.all([
+  const [settingsResponse, authResponse] = (await Promise.all([
     browser.runtime.sendMessage({ type: "get-settings" } satisfies BackgroundMessage),
-    browser.runtime.sendMessage({ type: "get-usage" } satisfies BackgroundMessage)
-  ])) as [BackgroundResponse<ExtensionSettings>, BackgroundResponse<DailyUsage[]>];
-  if (usageResponse.ok) usage = usageResponse.data;
+    browser.runtime.sendMessage({ type: "get-auth-state" } satisfies BackgroundMessage)
+  ])) as [
+    BackgroundResponse<ExtensionSettings>,
+    BackgroundResponse<AuthState>
+  ];
   if (settingsResponse.ok) loadedSettings = settingsResponse.data;
+  if (authResponse.ok) authState = authResponse.data;
+  if (authState.configured && authState.signedIn) {
+    const accountResponse = (await browser.runtime.sendMessage({
+      type: "get-account-usage"
+    } satisfies BackgroundMessage)) as BackgroundResponse<AccountUsage>;
+    if (accountResponse.ok) accountUsage = accountResponse.data;
+  }
   if (loadedSettings.languageSetupCompleted) uiLanguage = loadedSettings.userLanguage;
   else {
     uiLanguage = browserLanguage(browser.i18n.getUILanguage());
@@ -224,9 +311,7 @@ async function load(): Promise<void> {
   enabled.checked = loadedSettings.enabled;
   renderCopy();
   renderSelectors();
-  const setupComplete = loadedSettings.languageSetupCompleted && Boolean(loadedSettings.userGender);
-  onboarding.hidden = setupComplete;
-  settingsSection.hidden = !setupComplete;
+  renderSections();
 }
 
 void load().catch(() => {

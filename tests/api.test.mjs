@@ -218,4 +218,152 @@ describe("Gemini translation backend", () => {
     );
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("지금 어디에 있어요?");
   });
+
+  it("rejects a missing token when authentication is required", async () => {
+    const baseUrl = await startServer({
+      translate: vi.fn(),
+      logger: { info: vi.fn(), error: vi.fn() },
+      requireAuth: true
+    });
+    const response = await fetch(`${baseUrl}/v1/translations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "auth_required" } });
+  });
+
+  it("rejects an invalid Firebase token", async () => {
+    const baseUrl = await startServer({
+      translate: vi.fn(),
+      logger: { info: vi.fn(), error: vi.fn() },
+      verifyToken: vi.fn().mockRejectedValue(new Error("invalid"))
+    });
+    const response = await fetch(`${baseUrl}/v1/translations`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer invalid-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({})
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({
+      error: { code: "invalid_auth_token" }
+    });
+  });
+
+  it("verifies a Firebase token before translating", async () => {
+    const verifyToken = vi.fn().mockResolvedValue({ uid: "user-1" });
+    const usageStore = {
+      reserve: vi.fn().mockResolvedValue({
+        uid: "user-1",
+        period: "2026-10",
+        translationType: "outgoing",
+        characters: 2,
+        summary: { plan: "free" }
+      }),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined)
+    };
+    const translate = vi.fn().mockResolvedValue({
+      translatedText: "Xin chào",
+      provider: "gemini",
+      model: "test",
+      usage: { inputCharacters: 5 }
+    });
+    const baseUrl = await startServer({
+      translate,
+      verifyToken,
+      usageStore,
+      requireAuth: true,
+      logger: { info: vi.fn(), error: vi.fn() }
+    });
+    const response = await fetch(`${baseUrl}/v1/translations`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        text: "안녕",
+        sourceLanguage: "ko",
+        targetLanguage: "vi",
+        tone: "natural",
+        requestId: "authenticated-request"
+      })
+    });
+    expect(response.status).toBe(200);
+    expect(verifyToken).toHaveBeenCalledWith("valid-token");
+    expect(translate).toHaveBeenCalledOnce();
+    expect(usageStore.reserve).toHaveBeenCalledWith(
+      expect.objectContaining({ uid: "user-1" }),
+      "outgoing",
+      2
+    );
+    expect(usageStore.commit).toHaveBeenCalledOnce();
+  });
+
+  it("returns the authenticated account usage summary", async () => {
+    const account = {
+      plan: "free",
+      period: "2026-10",
+      resetAt: "2026-11-01T00:00:00.000Z"
+    };
+    const usageStore = { getSummary: vi.fn().mockResolvedValue(account) };
+    const baseUrl = await startServer({
+      verifyToken: vi.fn().mockResolvedValue({
+        uid: "user-1",
+        email: "user@example.com"
+      }),
+      usageStore,
+      logger: { info: vi.fn(), error: vi.fn() }
+    });
+    const response = await fetch(`${baseUrl}/v1/account`, {
+      headers: { Authorization: "Bearer valid-token" }
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(account);
+    expect(usageStore.getSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ uid: "user-1" })
+    );
+  });
+
+  it("rolls back reserved usage when Gemini translation fails", async () => {
+    const reservation = {
+      uid: "user-1",
+      period: "2026-10",
+      translationType: "outgoing",
+      characters: 2
+    };
+    const usageStore = {
+      reserve: vi.fn().mockResolvedValue(reservation),
+      commit: vi.fn(),
+      rollback: vi.fn().mockResolvedValue(undefined)
+    };
+    const baseUrl = await startServer({
+      translate: vi.fn().mockRejectedValue(new Error("provider failed")),
+      verifyToken: vi.fn().mockResolvedValue({ uid: "user-1" }),
+      usageStore,
+      logger: { info: vi.fn(), error: vi.fn() }
+    });
+    const response = await fetch(`${baseUrl}/v1/translations`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        text: "안녕",
+        sourceLanguage: "ko",
+        targetLanguage: "vi",
+        tone: "natural",
+        translationType: "outgoing"
+      })
+    });
+    expect(response.status).toBe(502);
+    expect(usageStore.rollback).toHaveBeenCalledWith(reservation);
+    expect(usageStore.commit).not.toHaveBeenCalled();
+  });
 });

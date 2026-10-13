@@ -12,8 +12,24 @@ import {
   recordTranslation,
   recordTranslationError
 } from "../src/usage";
+import {
+  getAuthState,
+  getFirebaseIdToken,
+  signInWithGoogle,
+  signOut
+} from "../src/auth/service";
+import { isAuthConfigured } from "../src/auth/config";
+import { getAccountUsage } from "../src/translation/local-api-provider";
 
 export default defineBackground(() => {
+  browser.runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === "install") {
+      void browser.tabs.create({
+        url: browser.runtime.getURL("/onboarding.html")
+      });
+    }
+  });
+
   browser.runtime.onMessage.addListener(
     async (message: BackgroundMessage): Promise<BackgroundResponse<unknown>> => {
       try {
@@ -30,12 +46,38 @@ export default defineBackground(() => {
           return { ok: true, data: await getUsage() };
         }
 
+        if (message.type === "get-auth-state") {
+          return { ok: true, data: await getAuthState() };
+        }
+
+        if (message.type === "sign-in") {
+          return { ok: true, data: await signInWithGoogle() };
+        }
+
+        if (message.type === "sign-out") {
+          return { ok: true, data: await signOut() };
+        }
+
+        if (message.type === "get-account-usage") {
+          const settings = await getSettings();
+          const idToken = await getFirebaseIdToken();
+          if (!idToken) throw new Error("Sign in is required.");
+          return {
+            ok: true,
+            data: await getAccountUsage(settings.localApiBaseUrl, idToken)
+          };
+        }
+
         const settings = await getSettings();
+        const idToken = await getFirebaseIdToken();
+        if (isAuthConfigured() && !idToken) {
+          throw new Error("Sign in is required to use translation.");
+        }
         const request = {
           ...message.payload,
           requestId: crypto.randomUUID()
         };
-        const result = await translate(request, settings);
+        const result = await translate(request, settings, idToken);
         await recordTranslation(result.inputCharacters);
         return { ok: true, data: result satisfies TranslationResult };
       } catch (error) {

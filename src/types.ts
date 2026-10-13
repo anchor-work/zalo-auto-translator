@@ -9,6 +9,7 @@ export type TranslationMode = "demo" | "local-api";
 export type TranslationLanguage = "ko" | "vi" | "en";
 export type TranslationSourceLanguage = TranslationLanguage | "auto";
 export type TranslationTargetLanguage = TranslationLanguage;
+export type TranslationType = "outgoing" | "incoming_manual" | "incoming_auto";
 export type UserGender = "male" | "female";
 export type ParticipantGender = UserGender | "unknown";
 export type RelativeAge = "unknown" | "older" | "same" | "younger";
@@ -75,13 +76,32 @@ export interface TranslationRequest {
   tone: TranslationTone;
   vietnameseAddress: VietnameseAddress;
   socialContext?: TranslationSocialContext;
+  translationType?: TranslationType;
   requestId: string;
+}
+
+export interface UsageBucket {
+  requests: number;
+  characters: number;
+}
+
+export interface UsageLimit extends UsageBucket {
+  perRequestCharacters: number;
+}
+
+export interface AccountUsage {
+  plan: "free" | "pro";
+  period: string;
+  resetAt: string;
+  limits: Record<TranslationType, UsageLimit>;
+  used: Record<TranslationType, UsageBucket>;
 }
 
 export interface TranslationResult {
   translatedText: string;
   provider: "demo" | "local-api";
   inputCharacters: number;
+  account?: AccountUsage;
 }
 
 export interface DailyUsage {
@@ -91,11 +111,26 @@ export interface DailyUsage {
   errors: number;
 }
 
+export interface AuthUser {
+  uid: string;
+  email: string;
+  displayName: string;
+}
+
+export type AuthState =
+  | { configured: false; signedIn: false }
+  | { configured: true; signedIn: false }
+  | { configured: true; signedIn: true; user: AuthUser };
+
 export type BackgroundMessage =
   | { type: "translate"; payload: Omit<TranslationRequest, "requestId"> }
   | { type: "get-settings" }
   | { type: "save-settings"; payload: ExtensionSettings }
-  | { type: "get-usage" };
+  | { type: "get-usage" }
+  | { type: "get-account-usage" }
+  | { type: "get-auth-state" }
+  | { type: "sign-in" }
+  | { type: "sign-out" };
 
 export type BackgroundResponse<T> =
   | { ok: true; data: T }

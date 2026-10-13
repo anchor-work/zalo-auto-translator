@@ -13,6 +13,7 @@ import {
 import type {
   BackgroundMessage,
   BackgroundResponse,
+  AccountUsage,
   ConversationProfile,
   ConversationRelationship,
   ExtensionSettings,
@@ -83,6 +84,17 @@ export default defineContentScript({
     } catch {
       // Keep migrated defaults so the content UI remains usable offline.
     }
+    let accountUsage: AccountUsage | null = null;
+    try {
+      const response = (await browser.runtime.sendMessage({
+        type: "get-account-usage"
+      } satisfies BackgroundMessage)) as BackgroundResponse<AccountUsage>;
+      if (response.ok) accountUsage = response.data;
+    } catch {
+      // The account endpoint may not be deployed yet during a staged rollout.
+    }
+    const autoIncomingAllowed =
+      accountUsage?.limits.incoming_auto.requests !== 0;
     let uiLanguage = currentSettings.userLanguage;
     const t = (key: Parameters<typeof uiText>[1], variables?: Record<string, string | number>) =>
       uiText(uiLanguage, key, variables);
@@ -268,12 +280,13 @@ export default defineContentScript({
     incomingToggleLabel.className = "zat-toggle zat-incoming-toggle";
     const incomingToggle = document.createElement("input");
     incomingToggle.type = "checkbox";
+    incomingToggle.disabled = !autoIncomingAllowed;
     const incomingToggleText = document.createElement("span");
     incomingToggleText.textContent = t("autoIncoming");
     incomingToggleLabel.append(incomingToggle, incomingToggleText);
     const incomingHint = document.createElement("small");
     incomingHint.className = "zat-hint";
-    incomingHint.textContent = t("incomingHint");
+    incomingHint.textContent = t(autoIncomingAllowed ? "incomingHint" : "autoRequiresPro");
 
     const sourceActions = document.createElement("div");
     sourceActions.className = "zat-source-actions";
@@ -479,7 +492,8 @@ export default defineContentScript({
           targetLanguage,
           tone,
           vietnameseAddress,
-          socialContext: outgoingSocialContext(activeProfile, currentSettings.userGender)
+          socialContext: outgoingSocialContext(activeProfile, currentSettings.userGender),
+          translationType: "outgoing"
         }
       };
 
@@ -598,7 +612,8 @@ export default defineContentScript({
     };
 
     const translateIncomingMessage = async (
-      overlay: IncomingOverlay
+      overlay: IncomingOverlay,
+      translationType: "incoming_manual" | "incoming_auto" = "incoming_manual"
     ): Promise<void> => {
       const { candidate, button, result } = overlay;
       if (button.disabled) return;
@@ -627,7 +642,8 @@ export default defineContentScript({
           targetLanguage: currentSettings.userLanguage,
           tone: "natural",
           vietnameseAddress: "neutral",
-          socialContext: incomingSocialContext(activeProfile, currentSettings.userGender)
+          socialContext: incomingSocialContext(activeProfile, currentSettings.userGender),
+          translationType
         }
       };
 
@@ -815,7 +831,7 @@ export default defineContentScript({
         }
         closeOpenOverlay(overlay);
         repositionIncomingOverlays();
-        void translateIncomingMessage(overlay).then(() => {
+        void translateIncomingMessage(overlay, "incoming_manual").then(() => {
           if (openOverlay !== overlay) result.hidden = true;
           repositionIncomingOverlays();
         });
@@ -827,7 +843,7 @@ export default defineContentScript({
 
       if (translateAutomatically) {
         closeOpenOverlay(overlay);
-        void translateIncomingMessage(overlay).then(() => {
+        void translateIncomingMessage(overlay, "incoming_auto").then(() => {
           if (openOverlay !== overlay) result.hidden = true;
           repositionIncomingOverlays();
         });
@@ -1073,7 +1089,7 @@ export default defineContentScript({
       resetConversationButton.textContent = t("resetConversationSettings");
       doneConversationButton.textContent = t("conversationSettingsDone");
       incomingToggleText.textContent = t("autoIncoming");
-      incomingHint.textContent = t("incomingHint");
+      incomingHint.textContent = t(autoIncomingAllowed ? "incomingHint" : "autoRequiresPro");
       clearAllButton.textContent = t("clearAll");
       previewLabel.firstChild!.textContent = t("preview");
       cancelButton.textContent = t("cancel");
@@ -1122,7 +1138,7 @@ export default defineContentScript({
       const languageChanged = nextSettings.userLanguage !== currentSettings.userLanguage;
       const enabledChanged = nextSettings.enabled !== currentSettings.enabled;
       currentSettings = nextSettings;
-      incomingToggle.checked = currentSettings.autoTranslateIncoming;
+      incomingToggle.checked = autoIncomingAllowed && currentSettings.autoTranslateIncoming;
       if (enabledChanged) body.classList.toggle("zat-hidden", !currentSettings.enabled);
       if (!languageChanged) return;
 
@@ -1300,7 +1316,7 @@ export default defineContentScript({
     });
 
     syncConversationProfile();
-    incomingToggle.checked = currentSettings.autoTranslateIncoming;
+    incomingToggle.checked = autoIncomingAllowed && currentSettings.autoTranslateIncoming;
     if (!currentSettings.enabled) body.classList.add("zat-hidden");
     refreshControls();
     requestAnimationFrame(restorePanelPosition);

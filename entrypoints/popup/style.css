@@ -23,6 +23,56 @@ section.settings {
   gap: 14px;
 }
 
+.auth-card {
+  background: linear-gradient(145deg, #f5f9ff, #eef4ff);
+  border: 1px solid #d8e5fb;
+  border-radius: 14px;
+  display: grid;
+  gap: 13px;
+  padding: 16px;
+}
+
+.account-row {
+  align-items: center;
+  background: #f5f7fb;
+  border-radius: 9px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 11px;
+}
+
+.account-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.account-row strong {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-label {
+  color: #657086;
+  font-size: 10px;
+}
+
+.secondary-button {
+  background: #e8eef8;
+  color: #31577d;
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 8px 10px;
+}
+
+body.onboarding-page {
+  margin: 0 auto;
+  width: min(100%, 430px);
+}
+
 .onboarding {
   background: linear-gradient(145deg, #f5f9ff, #eef4ff);
   border: 1px solid #d8e5fb;
@@ -191,6 +241,20 @@ dl {
   gap: 8px;
   grid-template-columns: repeat(3, 1fr);
   margin: 10px 0 0;
+}
+
+.monthly-usage {
+  grid-template-columns: 1fr;
+}
+
+.monthly-usage div {
+  border-top: 1px solid #e3e8f1;
+  padding-top: 7px;
+}
+
+.monthly-usage div:first-child {
+  border-top: 0;
+  padding-top: 0;
 }
 
 dl div {

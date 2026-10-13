@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zalo Language Bridge</title>
+  </head>
+  <body class="onboarding-page">
+    <main>
+      <h1 id="app-name">Zalo Language Bridge</h1>
+      <p id="description" class="description"></p>
+
+      <section id="auth-gate" class="auth-card" hidden>
+        <div class="welcome-mark" aria-hidden="true">文A</div>
+        <h2 id="sign-in-title"></h2>
+        <p id="sign-in-description" class="description"></p>
+        <button id="sign-in" type="button"></button>
+        <p id="auth-hint" class="hint" hidden></p>
+      </section>
+
+      <section id="onboarding" class="onboarding" hidden>
+        <div class="welcome-mark" aria-hidden="true">文A</div>
+        <h2 id="welcome-title"></h2>
+        <p id="welcome-description" class="description"></p>
+        <div class="field-group">
+          <span id="onboarding-language-label" class="field-label"></span>
+          <div id="language-buttons" class="segmented language-segmented" role="group"></div>
+        </div>
+        <fieldset class="field-group">
+          <legend id="onboarding-gender-label"></legend>
+          <p id="gender-description" class="field-description"></p>
+          <div class="segmented gender-segmented">
+            <label><input type="radio" name="onboarding-gender" value="male" /><span id="onboarding-male"></span></label>
+            <label><input type="radio" name="onboarding-gender" value="female" /><span id="onboarding-female"></span></label>
+          </div>
+        </fieldset>
+        <label><span id="onboarding-target-label"></span><select id="onboarding-target"></select></label>
+        <button id="start" type="button"></button>
+      </section>
+
+      <section id="settings" class="settings" hidden>
+        <div class="account-row">
+          <div><span id="signed-in-as" class="account-label"></span><strong id="account-email"></strong></div>
+          <button id="sign-out" class="secondary-button" type="button"></button>
+        </div>
+        <label class="toggle"><input id="enabled" type="checkbox" /><span id="enabled-label"></span></label>
+        <label><span id="user-language-label"></span><select id="user-language"></select></label>
+        <label><span id="user-gender-label"></span><select id="user-gender"></select></label>
+        <label><span id="target-language-label"></span><select id="target-language"></select></label>
+        <div id="language-hint" class="hint"></div>
+        <section class="usage" aria-labelledby="usage-title">
+          <h2 id="usage-title"></h2>
+          <dl class="monthly-usage">
+            <div><dt id="plan-label"></dt><dd id="plan-value">-</dd></div>
+            <div><dt id="outgoing-usage-label"></dt><dd id="outgoing-usage">-</dd></div>
+            <div><dt id="incoming-usage-label"></dt><dd id="incoming-usage">-</dd></div>
+            <div><dt id="reset-at-label"></dt><dd id="reset-at">-</dd></div>
+          </dl>
+        </section>
+      </section>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="../popup/main.ts"></script>
+  </body>
+</html>

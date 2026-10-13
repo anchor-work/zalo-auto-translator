@@ -3,6 +3,13 @@ import { defineConfig } from "wxt";
 const PRODUCTION_API_ORIGIN =
   "https://zalo-translator-api-s6bip5vp3a-du.a.run.app";
 
+function normalizeExtensionKey(value?: string): string {
+  return (value ?? "")
+    .replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----/g, "")
+    .replace(/\s+/g, "")
+    .trim();
+}
+
 export default defineConfig({
   manifest: ({ mode }) => {
     const development = mode === "development";
@@ -13,11 +20,24 @@ export default defineConfig({
       128: "icon/128.png"
     };
 
+    const oauthClientId = process.env.WXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID?.trim();
+    const extensionKey = normalizeExtensionKey(
+      process.env.WXT_PUBLIC_EXTENSION_KEY
+    );
     return {
       name: "Zalo Language Bridge",
       description: "Write and understand Zalo Web messages naturally across Korean, English, and Vietnamese.",
-      version: "0.10.5",
-      permissions: ["storage"],
+      version: "0.11.1",
+      ...(extensionKey ? { key: extensionKey } : {}),
+      permissions: ["storage", "identity"],
+      ...(oauthClientId
+        ? {
+            oauth2: {
+              client_id: oauthClientId,
+              scopes: ["openid", "email", "profile"]
+            }
+          }
+        : {}),
       host_permissions: development
         ? [
             "https://chat.zalo.me/*",

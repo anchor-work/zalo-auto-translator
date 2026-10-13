@@ -8,7 +8,8 @@ import { translateWithLocalApi } from "./local-api-provider";
 
 export async function translate(
   request: TranslationRequest,
-  settings: ExtensionSettings
+  settings: ExtensionSettings,
+  idToken?: string | null
 ): Promise<TranslationResult> {
   if (!settings.enabled) {
     throw new Error("확장프로그램이 비활성화되어 있습니다.");
@@ -19,7 +20,7 @@ export async function translate(
   }
 
   if (settings.mode === "local-api") {
-    return translateWithLocalApi(request, settings.localApiBaseUrl);
+    return translateWithLocalApi(request, settings.localApiBaseUrl, idToken);
   }
 
   return translateWithDemo(request);
