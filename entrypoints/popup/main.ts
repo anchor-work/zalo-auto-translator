@@ -7,6 +7,7 @@ import type {
   BackgroundResponse,
   AccountUsage,
   AuthState,
+  BillingRedirect,
   ExtensionSettings,
   TranslationLanguage,
   UserGender
@@ -33,6 +34,8 @@ const targetLanguage = element<HTMLSelectElement>("target-language");
 const enabled = element<HTMLInputElement>("enabled");
 const start = element<HTMLButtonElement>("start");
 const status = element<HTMLParagraphElement>("status");
+const upgradeLink = element<HTMLAnchorElement>("upgrade-link");
+const manageBilling = element<HTMLButtonElement>("manage-billing");
 let loadedSettings: ExtensionSettings = { ...DEFAULT_SETTINGS };
 let authState: AuthState = { configured: false, signedIn: false };
 let accountUsage: AccountUsage | null = null;
@@ -80,6 +83,7 @@ function renderUsage(): void {
   const upgradeCard = element<HTMLElement>("upgrade-card");
   const usageState = freeUsageState(accountUsage);
   upgradeCard.hidden = usageState === "unavailable" || usageState === "pro";
+  manageBilling.hidden = usageState !== "pro";
   upgradeCard.classList.toggle("near-limit", usageState === "near_limit");
   upgradeCard.classList.toggle("exhausted", usageState === "exhausted");
   element("upgrade-description").textContent = uiText(
@@ -121,7 +125,8 @@ function renderCopy(): void {
   element("incoming-usage-label").textContent = uiText(uiLanguage, "incomingUsage");
   element("reset-at-label").textContent = uiText(uiLanguage, "resetAt");
   element("upgrade-title").textContent = uiText(uiLanguage, "upgradeTitle");
-  element("upgrade-link").textContent = uiText(uiLanguage, "upgradeAction");
+  upgradeLink.textContent = uiText(uiLanguage, "upgradeAction");
+  manageBilling.textContent = uiText(uiLanguage, "manageBilling");
   start.textContent = uiText(uiLanguage, "start");
   renderUsage();
 }
@@ -280,6 +285,32 @@ signOutButton.addEventListener("click", async () => {
   if (response.ok) authState = response.data;
   accountUsage = null;
   renderSections();
+});
+
+async function openBilling(message: "create-billing-checkout" | "create-billing-portal"): Promise<void> {
+  status.textContent = uiText(uiLanguage, "billingOpening");
+  status.className = "";
+  try {
+    const response = (await browser.runtime.sendMessage({
+      type: message
+    } satisfies BackgroundMessage)) as BackgroundResponse<BillingRedirect>;
+    if (!response.ok) throw new Error(response.error);
+    await browser.tabs.create({ url: response.data.url });
+    window.close();
+  } catch (error) {
+    status.textContent = error instanceof Error && error.message
+      ? error.message
+      : uiText(uiLanguage, "billingFailed");
+    status.className = "error";
+  }
+}
+
+upgradeLink.addEventListener("click", (event) => {
+  event.preventDefault();
+  void openBilling("create-billing-checkout");
+});
+manageBilling.addEventListener("click", () => {
+  void openBilling("create-billing-portal");
 });
 
 enabled.addEventListener("change", () => scheduleSave({ enabled: enabled.checked }));

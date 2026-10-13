@@ -1,4 +1,4 @@
-import type { AccountUsage, TranslationRequest, TranslationResult } from "../types";
+import type { AccountUsage, BillingRedirect, TranslationRequest, TranslationResult } from "../types";
 import { validateApiBaseUrl } from "../settings";
 
 interface LocalApiResponse {
@@ -87,4 +87,27 @@ export async function getAccountUsage(
     );
   }
   return body;
+}
+
+export async function createBillingRedirect(
+  baseUrl: string,
+  idToken: string,
+  destination: "checkout" | "portal"
+): Promise<BillingRedirect> {
+  const safeBaseUrl = validateApiBaseUrl(baseUrl);
+  const response = await fetch(`${safeBaseUrl}/v1/billing/${destination}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${idToken}` }
+  });
+  const body = (await response.json()) as BillingRedirect & {
+    error?: { message?: unknown };
+  };
+  if (!response.ok || typeof body.url !== "string" || !body.url.startsWith("https://")) {
+    throw new Error(
+      typeof body.error?.message === "string"
+        ? body.error.message
+        : `결제 API 오류 (${response.status})`
+    );
+  }
+  return { url: body.url };
 }

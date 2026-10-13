@@ -6,6 +6,11 @@ import {
 } from "./gemini.mjs";
 import { bearerToken, verifyFirebaseIdToken } from "./auth.mjs";
 import { createFirestoreUsageStore } from "./usage.mjs";
+import {
+  BillingError,
+  createFirestoreBillingStore,
+  createPolarBillingService
+} from "./billing.mjs";
 
 const MAX_BODY_BYTES = 20_000;
 
@@ -60,11 +65,26 @@ async function readJson(request) {
   }
 }
 
+async function readRawBody(request, maxBytes = 100_000) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > maxBytes) {
+      throw new BillingError("요청 본문이 너무 큽니다.", 413, "body_too_large");
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 export function createApiServer({
   translate = translateWithGemini,
   logger = console,
   verifyToken = verifyFirebaseIdToken,
   usageStore = createFirestoreUsageStore(),
+  billingStore = createFirestoreBillingStore(),
+  billingService = createPolarBillingService(),
   requireAuth = process.env.ZALO_REQUIRE_AUTH === "true"
 } = {}) {
   return createServer(async (request, response) => {
@@ -87,9 +107,15 @@ export function createApiServer({
     }
 
     const accountRequest = request.method === "GET" && requestUrl.pathname === "/v1/account";
+    const checkoutRequest =
+      request.method === "POST" && requestUrl.pathname === "/v1/billing/checkout";
+    const portalRequest =
+      request.method === "POST" && requestUrl.pathname === "/v1/billing/portal";
+    const webhookRequest =
+      request.method === "POST" && requestUrl.pathname === "/v1/billing/polar/webhook";
     const translationRequest =
       request.method === "POST" && requestUrl.pathname === "/v1/translations";
-    if (!accountRequest && !translationRequest) {
+    if (!accountRequest && !checkoutRequest && !portalRequest && !webhookRequest && !translationRequest) {
       sendJson(response, 404, { error: { code: "not_found", message: "요청 경로를 찾을 수 없습니다." } }, origin);
       return;
     }
@@ -101,8 +127,31 @@ export function createApiServer({
     let failureStage = "authentication";
 
     try {
+      if (webhookRequest) {
+        failureStage = "webhook_verification";
+        const rawBody = await readRawBody(request);
+        const eventId = request.headers["webhook-id"];
+        if (typeof eventId !== "string" || !eventId) {
+          throw new BillingError("웹훅 ID가 없습니다.", 400, "missing_webhook_id");
+        }
+        const event = await billingService.validateWebhook(rawBody, {
+          "webhook-id": eventId,
+          "webhook-timestamp": String(request.headers["webhook-timestamp"] || ""),
+          "webhook-signature": String(request.headers["webhook-signature"] || "")
+        });
+        failureStage = "webhook_processing";
+        const result = await billingStore.applySubscriptionEvent(
+          eventId,
+          event,
+          billingService.getProductId()
+        );
+        sendJson(response, 200, { received: true, ...result }, null);
+        logger.info?.({ event: "billing_webhook_processed", eventId, type: event.type, handled: result.handled });
+        return;
+      }
+
       const token = bearerToken(request.headers.authorization);
-      if (!token && (requireAuth || accountRequest)) {
+      if (!token && (requireAuth || accountRequest || checkoutRequest || portalRequest)) {
         throw new TranslationError("로그인이 필요합니다.", 401, "auth_required");
       }
       let identity;
@@ -122,6 +171,18 @@ export function createApiServer({
         failureStage = "account_usage";
         const account = await usageStore.getSummary(identity);
         sendJson(response, 200, account, origin);
+        return;
+      }
+
+      if (checkoutRequest) {
+        failureStage = "checkout_creation";
+        sendJson(response, 200, await billingService.createCheckout(identity), origin);
+        return;
+      }
+
+      if (portalRequest) {
+        failureStage = "customer_portal_creation";
+        sendJson(response, 200, await billingService.createCustomerPortal(identity), origin);
         return;
       }
 
@@ -169,7 +230,7 @@ export function createApiServer({
       });
     } catch (error) {
       const safeError =
-        error instanceof TranslationError
+        error instanceof TranslationError || error instanceof BillingError
           ? error
           : failureStage === "account_usage" || failureStage === "usage_reservation"
             ? new TranslationError(
@@ -185,7 +246,7 @@ export function createApiServer({
         origin
       );
       logger.error?.({
-        event: "translation_failed",
+        event: webhookRequest || checkoutRequest || portalRequest ? "billing_failed" : "translation_failed",
         requestId,
         inputCharacters,
         durationMs: Math.round(performance.now() - startedAt),

@@ -97,6 +97,10 @@ export interface AccountUsage {
   used: Record<TranslationType, UsageBucket>;
 }
 
+export interface BillingRedirect {
+  url: string;
+}
+
 export interface TranslationResult {
   translatedText: string;
   provider: "demo" | "local-api";
@@ -128,6 +132,8 @@ export type BackgroundMessage =
   | { type: "save-settings"; payload: ExtensionSettings }
   | { type: "get-usage" }
   | { type: "get-account-usage" }
+  | { type: "create-billing-checkout" }
+  | { type: "create-billing-portal" }
   | { type: "get-auth-state" }
   | { type: "sign-in" }
   | { type: "sign-out" };

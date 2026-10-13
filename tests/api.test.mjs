@@ -330,6 +330,85 @@ describe("Gemini translation backend", () => {
     );
   });
 
+  it("creates a Polar checkout only for an authenticated user", async () => {
+    const billingService = {
+      createCheckout: vi.fn().mockResolvedValue({
+        url: "https://polar.sh/checkout/test",
+        checkoutId: "checkout-test"
+      })
+    };
+    const baseUrl = await startServer({
+      verifyToken: vi.fn().mockResolvedValue({
+        uid: "user-1",
+        email: "user@example.com",
+        name: "Test User"
+      }),
+      billingService,
+      logger: { info: vi.fn(), error: vi.fn() }
+    });
+    const response = await fetch(`${baseUrl}/v1/billing/checkout`, {
+      method: "POST",
+      headers: { Authorization: "Bearer valid-token", Origin: "chrome-extension://test" }
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      url: "https://polar.sh/checkout/test",
+      checkoutId: "checkout-test"
+    });
+    expect(billingService.createCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ uid: "user-1", email: "user@example.com" })
+    );
+  });
+
+  it("verifies and processes Polar webhooks without Firebase authentication", async () => {
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const event = { type: "subscription.active", data: { id: "sub-1" } };
+    const billingService = {
+      getProductId: vi.fn().mockReturnValue("prod-pro"),
+      validateWebhook: vi.fn().mockResolvedValue(event)
+    };
+    const billingStore = {
+      applySubscriptionEvent: vi.fn().mockResolvedValue({ handled: true, plan: "pro" })
+    };
+    const baseUrl = await startServer({ billingService, billingStore, logger });
+    const response = await fetch(`${baseUrl}/v1/billing/polar/webhook`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "webhook-id": "event-1",
+        "webhook-timestamp": "123",
+        "webhook-signature": "signature"
+      },
+      body: JSON.stringify(event)
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ received: true, handled: true, plan: "pro" });
+    expect(billingService.validateWebhook).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      expect.objectContaining({ "webhook-id": "event-1" })
+    );
+    expect(billingStore.applySubscriptionEvent).toHaveBeenCalledWith(
+      "event-1",
+      event,
+      "prod-pro"
+    );
+  });
+
+  it("rejects an unsigned Polar webhook", async () => {
+    const billingService = { validateWebhook: vi.fn(), getProductId: vi.fn() };
+    const baseUrl = await startServer({
+      billingService,
+      logger: { info: vi.fn(), error: vi.fn() }
+    });
+    const response = await fetch(`${baseUrl}/v1/billing/polar/webhook`, {
+      method: "POST",
+      body: "{}"
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "missing_webhook_id" } });
+    expect(billingService.validateWebhook).not.toHaveBeenCalled();
+  });
+
   it("logs safe Firestore diagnostics without request content", async () => {
     const logger = { info: vi.fn(), error: vi.fn() };
     const usageStore = {

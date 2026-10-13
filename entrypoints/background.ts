@@ -19,7 +19,10 @@ import {
   signOut
 } from "../src/auth/service";
 import { isAuthConfigured } from "../src/auth/config";
-import { getAccountUsage } from "../src/translation/local-api-provider";
+import {
+  createBillingRedirect,
+  getAccountUsage
+} from "../src/translation/local-api-provider";
 
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(({ reason }) => {
@@ -65,6 +68,20 @@ export default defineBackground(() => {
           return {
             ok: true,
             data: await getAccountUsage(settings.localApiBaseUrl, idToken)
+          };
+        }
+
+        if (message.type === "create-billing-checkout" || message.type === "create-billing-portal") {
+          const settings = await getSettings();
+          const idToken = await getFirebaseIdToken();
+          if (!idToken) throw new Error("Sign in is required.");
+          return {
+            ok: true,
+            data: await createBillingRedirect(
+              settings.localApiBaseUrl,
+              idToken,
+              message.type === "create-billing-checkout" ? "checkout" : "portal"
+            )
           };
         }
 
