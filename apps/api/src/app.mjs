@@ -25,6 +25,23 @@ function sendJson(response, statusCode, body, origin) {
   response.end(JSON.stringify(body));
 }
 
+function diagnosticError(error) {
+  if (!error || typeof error !== "object") return {};
+  const errorCode =
+    typeof error.code === "string" || typeof error.code === "number"
+      ? String(error.code).slice(0, 100)
+      : undefined;
+  const errorName =
+    typeof error.name === "string" ? error.name.slice(0, 100) : undefined;
+  const errorMessage =
+    typeof error.message === "string" ? error.message.slice(0, 500) : undefined;
+  return {
+    ...(errorCode ? { errorCode } : {}),
+    ...(errorName ? { errorName } : {}),
+    ...(errorMessage ? { errorMessage } : {})
+  };
+}
+
 async function readJson(request) {
   const chunks = [];
   let size = 0;
@@ -81,6 +98,7 @@ export function createApiServer({
     let requestId = "unknown";
     let inputCharacters = 0;
     let reservation;
+    let failureStage = "authentication";
 
     try {
       const token = bearerToken(request.headers.authorization);
@@ -101,15 +119,18 @@ export function createApiServer({
       }
 
       if (accountRequest) {
+        failureStage = "account_usage";
         const account = await usageStore.getSummary(identity);
         sendJson(response, 200, account, origin);
         return;
       }
 
+      failureStage = "request_validation";
       const payload = validateTranslationRequest(await readJson(request));
       requestId = payload.requestId;
       inputCharacters = [...payload.text.normalize("NFC")].length;
       if (identity) {
+        failureStage = "usage_reservation";
         reservation = await usageStore.reserve(
           identity,
           payload.translationType,
@@ -118,6 +139,7 @@ export function createApiServer({
       }
       let result;
       try {
+        failureStage = "translation_provider";
         result = await translate(payload);
       } catch (error) {
         if (reservation) {
@@ -149,7 +171,13 @@ export function createApiServer({
       const safeError =
         error instanceof TranslationError
           ? error
-          : new TranslationError("번역 처리 중 오류가 발생했습니다.");
+          : failureStage === "account_usage" || failureStage === "usage_reservation"
+            ? new TranslationError(
+                "사용량 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+                503,
+                "usage_service_unavailable"
+              )
+            : new TranslationError("번역 처리 중 오류가 발생했습니다.");
       sendJson(
         response,
         safeError.statusCode,
@@ -161,7 +189,9 @@ export function createApiServer({
         requestId,
         inputCharacters,
         durationMs: Math.round(performance.now() - startedAt),
-        code: safeError.code
+        code: safeError.code,
+        stage: failureStage,
+        ...(error instanceof TranslationError ? {} : diagnosticError(error))
       });
     }
   });

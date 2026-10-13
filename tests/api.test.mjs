@@ -330,6 +330,55 @@ describe("Gemini translation backend", () => {
     );
   });
 
+  it("logs safe Firestore diagnostics without request content", async () => {
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const usageStore = {
+      reserve: vi.fn().mockRejectedValue(
+        Object.assign(new Error("7 PERMISSION_DENIED: missing permission"), {
+          code: 7
+        })
+      )
+    };
+    const baseUrl = await startServer({
+      translate: vi.fn(),
+      verifyToken: vi.fn().mockResolvedValue({ uid: "user-1" }),
+      usageStore,
+      logger
+    });
+    const response = await fetch(`${baseUrl}/v1/translations`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        text: "로그에 남으면 안 되는 메시지",
+        sourceLanguage: "ko",
+        targetLanguage: "vi",
+        tone: "natural",
+        translationType: "outgoing",
+        requestId: "usage-diagnostic"
+      })
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "usage_service_unavailable" }
+    });
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "translation_failed",
+        stage: "usage_reservation",
+        errorCode: "7",
+        errorName: "Error",
+        errorMessage: "7 PERMISSION_DENIED: missing permission"
+      })
+    );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
+      "로그에 남으면 안 되는 메시지"
+    );
+  });
+
   it("rolls back reserved usage when Gemini translation fails", async () => {
     const reservation = {
       uid: "user-1",
