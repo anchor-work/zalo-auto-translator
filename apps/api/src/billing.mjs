@@ -3,6 +3,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
+const BILLING_PROCESSING_VERSION = 2;
 const SUPPORTED_SUBSCRIPTION_EVENTS = new Set([
   "subscription.active",
   "subscription.canceled",
@@ -46,7 +47,12 @@ function customerUid(subscription) {
   return typeof externalId === "string" ? externalId.trim() : "";
 }
 
-export function subscriptionAccountUpdate(subscription, productId, now = new Date()) {
+export function subscriptionAccountUpdate(
+  subscription,
+  productId,
+  now = new Date(),
+  eventType = "subscription.updated"
+) {
   if (!subscription || subscription.product_id !== productId) return null;
   const uid = customerUid(subscription);
   if (!uid) {
@@ -59,7 +65,10 @@ export function subscriptionAccountUpdate(subscription, productId, now = new Dat
     typeof periodEnd === "string" &&
     Number.isFinite(Date.parse(periodEnd)) &&
     Date.parse(periodEnd) > now.getTime();
-  const active = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) || paidThroughPeriodEnd;
+  const revoked = eventType === "subscription.revoked";
+  const active = !revoked && (
+    ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) || paidThroughPeriodEnd
+  );
   return {
     uid,
     plan: active ? "pro" : "free",
@@ -75,12 +84,18 @@ export function createFirestoreBillingStore({ db = firestoreInstance() } = {}) {
   return {
     async applySubscriptionEvent(eventId, event, productId) {
       if (!SUPPORTED_SUBSCRIPTION_EVENTS.has(event.type)) return { handled: false };
-      const update = subscriptionAccountUpdate(event.data, productId);
+      const update = subscriptionAccountUpdate(event.data, productId, new Date(), event.type);
       if (!update) return { handled: false };
       const eventRef = db.collection("billingEvents").doc(eventId);
       const userRef = db.collection("users").doc(update.uid);
       return db.runTransaction(async (transaction) => {
-        if ((await transaction.get(eventRef)).exists) return { handled: true, duplicate: true };
+        const eventSnapshot = await transaction.get(eventRef);
+        if (
+          eventSnapshot.exists &&
+          Number(eventSnapshot.data()?.processingVersion || 0) >= BILLING_PROCESSING_VERSION
+        ) {
+          return { handled: true, duplicate: true };
+        }
         transaction.set(userRef, {
           plan: update.plan,
           status: "active",
@@ -92,12 +107,13 @@ export function createFirestoreBillingStore({ db = firestoreInstance() } = {}) {
           cancelAtPeriodEnd: update.cancelAtPeriodEnd,
           updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
-        transaction.create(eventRef, {
+        transaction.set(eventRef, {
           type: event.type,
           uid: update.uid,
           subscriptionId: update.polarSubscriptionId,
+          processingVersion: BILLING_PROCESSING_VERSION,
           processedAt: FieldValue.serverTimestamp()
-        });
+        }, { merge: true });
         return { handled: true, duplicate: false, plan: update.plan };
       });
     }
