@@ -1,6 +1,6 @@
 import { createPolar, webhooks } from "@polar-sh/sdk/2026-10";
-import { getApps, initializeApp } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
+import { firestoreInstance } from "./firebase.mjs";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
 const BILLING_PROCESSING_VERSION = 2;
@@ -32,12 +32,6 @@ function required(value, name) {
     throw new BillingError(`${name} 환경변수가 설정되지 않았습니다.`, 503, "billing_not_configured");
   }
   return normalized;
-}
-
-function firestoreInstance() {
-  const app = getApps()[0] || initializeApp();
-  const databaseId = process.env.ZALO_FIRESTORE_DATABASE_ID?.trim();
-  return databaseId ? getFirestore(app, databaseId) : getFirestore(app);
 }
 
 function customerUid(subscription) {

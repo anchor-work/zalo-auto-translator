@@ -202,7 +202,7 @@ describe("Gemini translation backend", () => {
     const baseUrl = await startServer({ translate, logger });
     const response = await fetch(`${baseUrl}/v1/translations`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Origin: "chrome-extension://test" },
+      headers: { "Content-Type": "application/json", Origin: "chrome-extension://plpnodgifmdinnphgnlhknmapmikjncn" },
       body: JSON.stringify({
         text: "지금 어디에 있어요?",
         sourceLanguage: "ko",
@@ -212,7 +212,7 @@ describe("Gemini translation backend", () => {
       })
     });
     expect(response.status).toBe(200);
-    expect(response.headers.get("access-control-allow-origin")).toBe("chrome-extension://test");
+    expect(response.headers.get("access-control-allow-origin")).toBe("chrome-extension://plpnodgifmdinnphgnlhknmapmikjncn");
     expect(await response.json()).toMatchObject({ translatedText: "Bây giờ bạn đang ở đâu?" });
     expect(logger.info).toHaveBeenCalledWith(
       expect.objectContaining({ event: "translation_completed", inputCharacters: 11 })
@@ -353,7 +353,7 @@ describe("Gemini translation backend", () => {
     });
     const response = await fetch(`${baseUrl}/v1/billing/checkout`, {
       method: "POST",
-      headers: { Authorization: "Bearer valid-token", Origin: "chrome-extension://test" }
+      headers: { Authorization: "Bearer valid-token", Origin: "chrome-extension://plpnodgifmdinnphgnlhknmapmikjncn" }
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
@@ -387,7 +387,7 @@ describe("Gemini translation backend", () => {
     });
     const response = await fetch(`${baseUrl}/v1/billing/checkout`, {
       method: "POST",
-      headers: { Authorization: "Bearer valid-token", Origin: "chrome-extension://test" }
+      headers: { Authorization: "Bearer valid-token", Origin: "chrome-extension://plpnodgifmdinnphgnlhknmapmikjncn" }
     });
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({

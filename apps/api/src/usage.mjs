@@ -1,6 +1,6 @@
-import { getApps, initializeApp } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import { TranslationError } from "./gemini.mjs";
+import { firestoreInstance } from "./firebase.mjs";
 
 export const PLAN_LIMITS = {
   free: {
@@ -20,12 +20,6 @@ const FIELD_PREFIX = {
   incoming_manual: "incomingManual",
   incoming_auto: "incomingAuto"
 };
-
-function firestoreInstance() {
-  const app = getApps()[0] || initializeApp();
-  const databaseId = process.env.ZALO_FIRESTORE_DATABASE_ID?.trim();
-  return databaseId ? getFirestore(app, databaseId) : getFirestore(app);
-}
 
 export function billingPeriod(date = new Date()) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;

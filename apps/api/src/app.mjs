@@ -13,20 +13,18 @@ import {
 } from "./billing.mjs";
 
 const MAX_BODY_BYTES = 20_000;
+const EXTENSION_ORIGIN = "chrome-extension://plpnodgifmdinnphgnlhknmapmikjncn";
 
-function allowedOrigin(origin) {
-  if (!origin) return null;
-  if (origin.startsWith("chrome-extension://")) return origin;
-  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return origin;
-  return null;
+function isAllowedOrigin(origin) {
+  return origin === EXTENSION_ORIGIN;
 }
 
-function sendJson(response, statusCode, body, origin) {
+function sendJson(response, statusCode, body, allowCors) {
   response.statusCode = statusCode;
   response.setHeader("Content-Type", "application/json; charset=utf-8");
   response.setHeader("Cache-Control", "no-store");
   response.setHeader("X-Content-Type-Options", "nosniff");
-  if (origin) response.setHeader("Access-Control-Allow-Origin", origin);
+  if (allowCors) response.setHeader("Access-Control-Allow-Origin", EXTENSION_ORIGIN);
   response.end(JSON.stringify(body));
 }
 
@@ -89,11 +87,11 @@ export function createApiServer({
 } = {}) {
   return createServer(async (request, response) => {
     const requestUrl = new URL(request.url || "/", "http://localhost");
-    const origin = allowedOrigin(request.headers.origin);
+    const allowCors = isAllowedOrigin(request.headers.origin);
 
     if (request.method === "OPTIONS") {
       response.statusCode = 204;
-      if (origin) response.setHeader("Access-Control-Allow-Origin", origin);
+      if (allowCors) response.setHeader("Access-Control-Allow-Origin", EXTENSION_ORIGIN);
       response.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
       response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
       response.setHeader("Access-Control-Max-Age", "600");
@@ -102,7 +100,7 @@ export function createApiServer({
     }
 
     if (request.method === "GET" && requestUrl.pathname === "/health") {
-      sendJson(response, 200, { status: "ok", model: process.env.ZALO_GEMINI_MODEL || "gemini-3.1-flash-lite" }, origin);
+      sendJson(response, 200, { status: "ok", model: process.env.ZALO_GEMINI_MODEL || "gemini-3.1-flash-lite" }, allowCors);
       return;
     }
 
@@ -116,7 +114,7 @@ export function createApiServer({
     const translationRequest =
       request.method === "POST" && requestUrl.pathname === "/v1/translations";
     if (!accountRequest && !checkoutRequest && !portalRequest && !webhookRequest && !translationRequest) {
-      sendJson(response, 404, { error: { code: "not_found", message: "요청 경로를 찾을 수 없습니다." } }, origin);
+      sendJson(response, 404, { error: { code: "not_found", message: "요청 경로를 찾을 수 없습니다." } }, allowCors);
       return;
     }
 
@@ -170,7 +168,7 @@ export function createApiServer({
       if (accountRequest) {
         failureStage = "account_usage";
         const account = await usageStore.getSummary(identity);
-        sendJson(response, 200, account, origin);
+        sendJson(response, 200, account, allowCors);
         return;
       }
 
@@ -178,14 +176,14 @@ export function createApiServer({
         failureStage = "checkout_creation";
         await billingStore.assertCheckoutAllowed(identity);
         const checkout = await billingService.createCheckout(identity);
-        sendJson(response, 200, checkout, origin);
+        sendJson(response, 200, checkout, allowCors);
         logger.info?.({ event: "billing_checkout_created" });
         return;
       }
 
       if (portalRequest) {
         failureStage = "customer_portal_creation";
-        sendJson(response, 200, await billingService.createCustomerPortal(identity), origin);
+        sendJson(response, 200, await billingService.createCustomerPortal(identity), allowCors);
         return;
       }
 
@@ -222,7 +220,7 @@ export function createApiServer({
         response,
         200,
         { ...result, ...(reservation ? { account: reservation.summary } : {}) },
-        origin
+        allowCors
       );
       logger.info?.({
         event: "translation_completed",
@@ -246,7 +244,7 @@ export function createApiServer({
         response,
         safeError.statusCode,
         { error: { code: safeError.code, message: safeError.message } },
-        origin
+        allowCors
       );
       logger.error?.({
         event: webhookRequest || checkoutRequest || portalRequest ? "billing_failed" : "translation_failed",

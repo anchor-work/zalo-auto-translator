@@ -1,4 +1,5 @@
 name: Deploy billing sandbox API to Cloud Run
+# iron-laws: ignore-file[IL-101] Secret Manager resource names are mapped here; secret values are injected only at runtime. until=2027-10-14
 
 on:
   workflow_dispatch:
