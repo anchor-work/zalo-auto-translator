@@ -4,6 +4,8 @@ import type { ExtensionSettings } from "./types";
 const SETTINGS_KEY = "settings";
 export const PRODUCTION_API_BASE_URL =
   "https://zalo-translator-api-s6bip5vp3a-du.a.run.app";
+const BUILD_API_BASE_URL = import.meta.env.WXT_PUBLIC_API_BASE_URL?.trim() || "";
+export const DEFAULT_API_BASE_URL = BUILD_API_BASE_URL || PRODUCTION_API_BASE_URL;
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   schemaVersion: 6,
@@ -19,7 +21,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   conversationProfiles: {},
   panelPosition: null,
   mode: "local-api",
-  localApiBaseUrl: PRODUCTION_API_BASE_URL
+  localApiBaseUrl: DEFAULT_API_BASE_URL
 };
 
 const LANGUAGES = new Set(["ko", "en", "vi"]);
@@ -59,7 +61,10 @@ export function normalizeSettings(
       Number.isFinite(value.panelPosition.left) &&
       Number.isFinite(value.panelPosition.top)
         ? value.panelPosition
-        : null
+        : null,
+    localApiBaseUrl: BUILD_API_BASE_URL
+      ? DEFAULT_API_BASE_URL
+      : value?.localApiBaseUrl || DEFAULT_API_BASE_URL
   };
 }
 
@@ -83,9 +88,12 @@ export function validateApiBaseUrl(value: string): string {
 
   const isLocal =
     url.protocol === "http:" && new Set(["localhost", "127.0.0.1"]).has(url.hostname);
-  const isProductionApi = url.origin === PRODUCTION_API_BASE_URL;
+  const isOfficialApi = new Set([
+    PRODUCTION_API_BASE_URL,
+    ...(BUILD_API_BASE_URL ? [DEFAULT_API_BASE_URL] : [])
+  ]).has(url.origin);
 
-  if ((!isLocal && !isProductionApi) || url.username || url.password) {
+  if ((!isLocal && !isOfficialApi) || url.username || url.password) {
     throw new Error(
       "번역 API 주소는 로컬 개발 주소 또는 공식 번역 서버 주소를 사용해야 합니다."
     );

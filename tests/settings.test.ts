@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeSettings, validateApiBaseUrl } from "../src/settings";
+import {
+  DEFAULT_API_BASE_URL,
+  normalizeSettings,
+  validateApiBaseUrl
+} from "../src/settings";
 
 describe("settings migration", () => {
   it("migrates existing users to Korean without losing their preferences", () => {
@@ -42,6 +46,10 @@ describe("translation API URL validation", () => {
         "https://zalo-translator-api-s6bip5vp3a-du.a.run.app/"
       )
     ).toBe("https://zalo-translator-api-s6bip5vp3a-du.a.run.app");
+  });
+
+  it("uses the configured build API as the default", () => {
+    expect(normalizeSettings().localApiBaseUrl).toBe(DEFAULT_API_BASE_URL);
   });
 
   it("rejects unknown, insecure, and credential-bearing URLs", () => {

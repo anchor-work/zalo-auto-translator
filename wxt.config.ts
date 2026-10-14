@@ -2,6 +2,8 @@ import { defineConfig } from "wxt";
 
 const PRODUCTION_API_ORIGIN =
   "https://zalo-translator-api-s6bip5vp3a-du.a.run.app";
+const BUILD_API_ORIGIN =
+  process.env.WXT_PUBLIC_API_BASE_URL?.trim() || PRODUCTION_API_ORIGIN;
 
 function normalizeExtensionKey(value?: string): string {
   return (value ?? "")
@@ -25,7 +27,9 @@ export default defineConfig({
       process.env.WXT_PUBLIC_EXTENSION_KEY
     );
     return {
-      name: "Zalo Language Bridge",
+      name: process.env.WXT_PUBLIC_BILLING_SANDBOX === "true"
+        ? "Zalo Language Bridge (Sandbox)"
+        : "Zalo Language Bridge",
       description: "Write and understand Zalo Web messages naturally across Korean, English, and Vietnamese.",
       version: "0.11.9",
       ...(extensionKey ? { key: extensionKey } : {}),
@@ -43,9 +47,10 @@ export default defineConfig({
             "https://chat.zalo.me/*",
             "http://localhost/*",
             "http://127.0.0.1/*",
-            `${PRODUCTION_API_ORIGIN}/*`
+            `${PRODUCTION_API_ORIGIN}/*`,
+            `${BUILD_API_ORIGIN}/*`
           ]
-        : ["https://chat.zalo.me/*", `${PRODUCTION_API_ORIGIN}/*`],
+        : ["https://chat.zalo.me/*", `${BUILD_API_ORIGIN}/*`],
       icons,
       action: {
         default_title: "Zalo Language Bridge Settings",
