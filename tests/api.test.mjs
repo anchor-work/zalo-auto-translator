@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApiServer } from "../apps/api/src/app.mjs";
+import { BillingError } from "../apps/api/src/billing.mjs";
 import {
   countCharacters,
   translateWithGemini,
@@ -337,6 +338,9 @@ describe("Gemini translation backend", () => {
         checkoutId: "checkout-test"
       })
     };
+    const billingStore = {
+      assertCheckoutAllowed: vi.fn().mockResolvedValue(undefined)
+    };
     const baseUrl = await startServer({
       verifyToken: vi.fn().mockResolvedValue({
         uid: "user-1",
@@ -344,6 +348,7 @@ describe("Gemini translation backend", () => {
         name: "Test User"
       }),
       billingService,
+      billingStore,
       logger: { info: vi.fn(), error: vi.fn() }
     });
     const response = await fetch(`${baseUrl}/v1/billing/checkout`, {
@@ -358,6 +363,37 @@ describe("Gemini translation backend", () => {
     expect(billingService.createCheckout).toHaveBeenCalledWith(
       expect.objectContaining({ uid: "user-1", email: "user@example.com" })
     );
+    expect(billingStore.assertCheckoutAllowed).toHaveBeenCalledWith(
+      expect.objectContaining({ uid: "user-1" })
+    );
+  });
+
+  it("does not create another checkout for an existing Pro subscriber", async () => {
+    const billingService = { createCheckout: vi.fn() };
+    const billingStore = {
+      assertCheckoutAllowed: vi.fn().mockRejectedValue(
+        new BillingError(
+          "이미 Pro 요금제를 이용 중입니다. 구독 관리에서 현재 구독을 확인해 주세요.",
+          409,
+          "subscription_already_active"
+        )
+      )
+    };
+    const baseUrl = await startServer({
+      verifyToken: vi.fn().mockResolvedValue({ uid: "user-1" }),
+      billingService,
+      billingStore,
+      logger: { info: vi.fn(), error: vi.fn() }
+    });
+    const response = await fetch(`${baseUrl}/v1/billing/checkout`, {
+      method: "POST",
+      headers: { Authorization: "Bearer valid-token", Origin: "chrome-extension://test" }
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "subscription_already_active" }
+    });
+    expect(billingService.createCheckout).not.toHaveBeenCalled();
   });
 
   it("verifies and processes Polar webhooks without Firebase authentication", async () => {

@@ -176,7 +176,10 @@ export function createApiServer({
 
       if (checkoutRequest) {
         failureStage = "checkout_creation";
-        sendJson(response, 200, await billingService.createCheckout(identity), origin);
+        await billingStore.assertCheckoutAllowed(identity);
+        const checkout = await billingService.createCheckout(identity);
+        sendJson(response, 200, checkout, origin);
+        logger.info?.({ event: "billing_checkout_created" });
         return;
       }
 

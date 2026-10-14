@@ -82,6 +82,21 @@ export function subscriptionAccountUpdate(
 
 export function createFirestoreBillingStore({ db = firestoreInstance() } = {}) {
   return {
+    async assertCheckoutAllowed(identity) {
+      const snapshot = await db.collection("users").doc(identity.uid).get();
+      if (!snapshot.exists) return;
+      const account = snapshot.data() || {};
+      if (
+        account.plan === "pro" ||
+        ACTIVE_SUBSCRIPTION_STATUSES.has(account.subscriptionStatus)
+      ) {
+        throw new BillingError(
+          "이미 Pro 요금제를 이용 중입니다. 구독 관리에서 현재 구독을 확인해 주세요.",
+          409,
+          "subscription_already_active"
+        );
+      }
+    },
     async applySubscriptionEvent(eventId, event, productId) {
       if (!SUPPORTED_SUBSCRIPTION_EVENTS.has(event.type)) return { handled: false };
       const update = subscriptionAccountUpdate(event.data, productId, new Date(), event.type);
