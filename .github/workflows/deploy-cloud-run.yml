@@ -71,6 +71,7 @@ jobs:
             "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REPOSITORY}/${CLOUD_RUN_SERVICE}:${GITHUB_SHA}"
 
       - name: Deploy Cloud Run revision
+        # Runtime service account must have Secret Accessor on every mapped secret.
         run: |
           gcloud run deploy "${CLOUD_RUN_SERVICE}" \
             --project="${GCP_PROJECT_ID}" \
