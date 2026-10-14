@@ -113,7 +113,10 @@ export default defineContentScript({
     document.documentElement.append(host);
 
     const style = document.createElement("style");
-    style.textContent = contentStyle;
+    style.textContent = contentStyle.replaceAll(
+      "/font/PretendardVariable.woff2",
+      browser.runtime.getURL("/font/PretendardVariable.woff2")
+    );
     shadow.append(style);
 
     const panel = document.createElement("section");

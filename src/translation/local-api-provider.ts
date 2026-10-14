@@ -1,4 +1,4 @@
-import type { AccountUsage, BillingRedirect, TranslationRequest, TranslationResult } from "../types";
+import type { AccountUsage, BillingRedirect, EnterpriseInquiry, TranslationRequest, TranslationResult } from "../types";
 import { validateApiBaseUrl } from "../settings";
 
 interface LocalApiResponse {
@@ -110,4 +110,29 @@ export async function createBillingRedirect(
     );
   }
   return { url: body.url };
+}
+
+export async function sendEnterpriseInquiry(
+  baseUrl: string,
+  idToken: string,
+  inquiry: EnterpriseInquiry
+): Promise<{ received: true }> {
+  const safeBaseUrl = validateApiBaseUrl(baseUrl);
+  const response = await fetch(`${safeBaseUrl}/v1/enterprise-inquiries`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(inquiry)
+  });
+  const body = (await response.json()) as { received?: unknown; error?: { message?: unknown } };
+  if (!response.ok || body.received !== true) {
+    throw new Error(
+      typeof body.error?.message === "string"
+        ? body.error.message
+        : `문의 전송 API 오류 (${response.status})`
+    );
+  }
+  return { received: true };
 }

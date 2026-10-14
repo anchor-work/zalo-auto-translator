@@ -11,6 +11,11 @@ import {
   createFirestoreBillingStore,
   createPolarBillingService
 } from "./billing.mjs";
+import {
+  createEnterpriseInquiryService,
+  EnterpriseInquiryError,
+  validateEnterpriseInquiry
+} from "./enterprise.mjs";
 
 const MAX_BODY_BYTES = 20_000;
 const EXTENSION_ORIGIN = "chrome-extension://plpnodgifmdinnphgnlhknmapmikjncn";
@@ -83,6 +88,7 @@ export function createApiServer({
   usageStore = createFirestoreUsageStore(),
   billingStore = createFirestoreBillingStore(),
   billingService = createPolarBillingService(),
+  enterpriseService = createEnterpriseInquiryService(),
   requireAuth = process.env.ZALO_REQUIRE_AUTH === "true"
 } = {}) {
   return createServer(async (request, response) => {
@@ -113,7 +119,9 @@ export function createApiServer({
       request.method === "POST" && requestUrl.pathname === "/v1/billing/polar/webhook";
     const translationRequest =
       request.method === "POST" && requestUrl.pathname === "/v1/translations";
-    if (!accountRequest && !checkoutRequest && !portalRequest && !webhookRequest && !translationRequest) {
+    const enterpriseRequest =
+      request.method === "POST" && requestUrl.pathname === "/v1/enterprise-inquiries";
+    if (!accountRequest && !checkoutRequest && !portalRequest && !webhookRequest && !translationRequest && !enterpriseRequest) {
       sendJson(response, 404, { error: { code: "not_found", message: "요청 경로를 찾을 수 없습니다." } }, allowCors);
       return;
     }
@@ -149,7 +157,7 @@ export function createApiServer({
       }
 
       const token = bearerToken(request.headers.authorization);
-      if (!token && (requireAuth || accountRequest || checkoutRequest || portalRequest)) {
+      if (!token && (requireAuth || accountRequest || checkoutRequest || portalRequest || enterpriseRequest)) {
         throw new TranslationError("로그인이 필요합니다.", 401, "auth_required");
       }
       let identity;
@@ -184,6 +192,14 @@ export function createApiServer({
       if (portalRequest) {
         failureStage = "customer_portal_creation";
         sendJson(response, 200, await billingService.createCustomerPortal(identity), allowCors);
+        return;
+      }
+
+      if (enterpriseRequest) {
+        failureStage = "enterprise_inquiry";
+        const inquiry = validateEnterpriseInquiry(await readJson(request));
+        sendJson(response, 200, await enterpriseService.send(inquiry, identity), allowCors);
+        logger.info?.({ event: "enterprise_inquiry_sent", language: inquiry.language, teamSize: inquiry.teamSize });
         return;
       }
 
@@ -231,7 +247,7 @@ export function createApiServer({
       });
     } catch (error) {
       const safeError =
-        error instanceof TranslationError || error instanceof BillingError
+        error instanceof TranslationError || error instanceof BillingError || error instanceof EnterpriseInquiryError
           ? error
           : failureStage === "account_usage" || failureStage === "usage_reservation"
             ? new TranslationError(
@@ -239,6 +255,12 @@ export function createApiServer({
                 503,
                 "usage_service_unavailable"
               )
+            : failureStage === "enterprise_inquiry"
+              ? new EnterpriseInquiryError(
+                  "문의를 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
+                  503,
+                  "inquiry_service_unavailable"
+                )
             : new TranslationError("번역 처리 중 오류가 발생했습니다.");
       sendJson(
         response,
@@ -247,13 +269,13 @@ export function createApiServer({
         allowCors
       );
       logger.error?.({
-        event: webhookRequest || checkoutRequest || portalRequest ? "billing_failed" : "translation_failed",
+        event: webhookRequest || checkoutRequest || portalRequest ? "billing_failed" : enterpriseRequest ? "enterprise_inquiry_failed" : "translation_failed",
         requestId,
         inputCharacters,
         durationMs: Math.round(performance.now() - startedAt),
         code: safeError.code,
         stage: failureStage,
-        ...(error instanceof TranslationError ? {} : diagnosticError(error))
+        ...(error instanceof TranslationError || error instanceof EnterpriseInquiryError ? {} : diagnosticError(error))
       });
     }
   });

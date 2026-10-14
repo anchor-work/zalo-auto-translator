@@ -530,4 +530,59 @@ describe("Gemini translation backend", () => {
     expect(usageStore.rollback).toHaveBeenCalledWith(reservation);
     expect(usageStore.commit).not.toHaveBeenCalled();
   });
+
+  it("sends an authenticated Enterprise inquiry without logging its contents", async () => {
+    const enterpriseService = { send: vi.fn().mockResolvedValue({ received: true }) };
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const identity = { uid: "user-1", email: "buyer@example.com" };
+    const baseUrl = await startServer({
+      verifyToken: vi.fn().mockResolvedValue(identity),
+      enterpriseService,
+      logger
+    });
+    const inquiry = {
+      name: "김담당",
+      company: "테스트 회사",
+      teamSize: "11-50",
+      message: "베트남 지사에서 사용할 번역 도입을 문의합니다.",
+      language: "ko"
+    };
+    const response = await fetch(`${baseUrl}/v1/enterprise-inquiries`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer valid-token",
+        "Content-Type": "application/json",
+        Origin: "chrome-extension://plpnodgifmdinnphgnlhknmapmikjncn"
+      },
+      body: JSON.stringify(inquiry)
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ received: true });
+    expect(enterpriseService.send).toHaveBeenCalledWith(inquiry, identity);
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(inquiry.message);
+  });
+
+  it("requires authentication and validates Enterprise inquiry fields", async () => {
+    const enterpriseService = { send: vi.fn() };
+    const baseUrl = await startServer({
+      enterpriseService,
+      verifyToken: vi.fn().mockResolvedValue({ uid: "user-1", email: "buyer@example.com" }),
+      logger: { info: vi.fn(), error: vi.fn() }
+    });
+    const missingToken = await fetch(`${baseUrl}/v1/enterprise-inquiries`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    expect(missingToken.status).toBe(401);
+
+    const invalid = await fetch(`${baseUrl}/v1/enterprise-inquiries`, {
+      method: "POST",
+      headers: { Authorization: "Bearer valid-token", "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "A", company: "B", teamSize: "bad", message: "short", language: "ko" })
+    });
+    expect(invalid.status).toBe(400);
+    expect(enterpriseService.send).not.toHaveBeenCalled();
+  });
 });

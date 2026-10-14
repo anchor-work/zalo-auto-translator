@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { translateWithLocalApi } from "../src/translation/local-api-provider";
+import { sendEnterpriseInquiry, translateWithLocalApi } from "../src/translation/local-api-provider";
 
 const request = {
   text: "안녕하세요",
@@ -57,5 +57,24 @@ describe("local API provider authentication", () => {
 
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
     expect(headers.Authorization).toBeUndefined();
+  });
+
+  it("sends Enterprise inquiries through the authenticated API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ received: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await sendEnterpriseInquiry(
+      "https://zalo-translator-api-s6bip5vp3a-du.a.run.app",
+      "firebase-token",
+      { name: "Sean", company: "Anchor", teamSize: "1-10", message: "Enterprise 도입을 상담하고 싶습니다.", language: "ko" }
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/v1/enterprise-inquiries"),
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: "Bearer firebase-token" }) })
+    );
   });
 });

@@ -1,8 +1,16 @@
+@font-face {
+  font-family: Pretendard;
+  src: url("/font/PretendardVariable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+}
+
 :host {
   all: initial;
   color: #172033;
   display: block;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   inset: 0;
   pointer-events: none;
   position: fixed;
@@ -317,7 +325,7 @@ button:disabled {
   box-sizing: border-box;
   color: #172033;
   cursor: pointer;
-  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: 14px/1.5 Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   max-width: min(440px, calc(100vw - 24px));
   overflow: auto;
   padding: 28px 12px 10px;
@@ -329,7 +337,7 @@ button:disabled {
 .zat-incoming-card::before {
   color: #2867e8;
   content: var(--zat-incoming-title, "Translation · Click to close");
-  font: 700 11px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: 700 11px/1.2 Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   left: 12px;
   position: absolute;
   top: 9px;

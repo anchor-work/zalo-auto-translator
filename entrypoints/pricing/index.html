@@ -8,7 +8,11 @@
   <body>
     <header class="site-header">
       <a class="brand" href="#top"><span aria-hidden="true">文A</span> Zalo Language Bridge</a>
-      <span id="account-email" class="account-email"></span>
+      <div class="language-switcher" role="group" aria-label="Page language">
+        <button type="button" data-language="ko">한국어</button>
+        <button type="button" data-language="en">English</button>
+        <button type="button" data-language="vi">Tiếng Việt</button>
+      </div>
     </header>
 
     <main id="top">
@@ -49,7 +53,7 @@
           <div class="price"><strong id="enterprise-price"></strong></div>
           <p id="enterprise-description" class="plan-description"></p>
           <ul id="enterprise-features"></ul>
-          <a id="enterprise-contact" class="button enterprise" href="mailto:architect@anchors.work?subject=Zalo%20Language%20Bridge%20Enterprise"></a>
+          <button id="enterprise-contact" class="button enterprise" type="button"></button>
           <p id="enterprise-note" class="card-note"></p>
         </article>
       </section>
@@ -72,6 +76,31 @@
       </section>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </main>
+
+    <dialog id="enterprise-dialog" class="inquiry-dialog" aria-labelledby="inquiry-title">
+      <form id="enterprise-form" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p id="inquiry-kicker" class="plan-kicker"></p>
+            <h2 id="inquiry-title"></h2>
+            <p id="inquiry-description"></p>
+          </div>
+          <button id="close-inquiry" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="form-grid">
+          <label><span id="name-label"></span><input id="inquiry-name" name="name" maxlength="80" autocomplete="name" required /></label>
+          <label><span id="company-label"></span><input id="inquiry-company" name="company" maxlength="120" autocomplete="organization" required /></label>
+          <label class="full-width"><span id="team-size-label"></span><select id="inquiry-team-size" name="teamSize" required></select></label>
+          <label class="full-width"><span id="message-label"></span><textarea id="inquiry-message" name="message" minlength="10" maxlength="2000" rows="6" required></textarea><small id="message-help"></small></label>
+        </div>
+        <label class="consent"><input id="inquiry-consent" type="checkbox" required /><span id="consent-label"></span></label>
+        <p id="inquiry-status" class="inquiry-status" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button id="cancel-inquiry" class="button secondary" type="button"></button>
+          <button id="submit-inquiry" class="button primary" type="submit"></button>
+        </div>
+      </form>
+    </dialog>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

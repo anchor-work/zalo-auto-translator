@@ -101,6 +101,14 @@ export interface BillingRedirect {
   url: string;
 }
 
+export interface EnterpriseInquiry {
+  name: string;
+  company: string;
+  teamSize: "1-10" | "11-50" | "51-200" | "201+" | "unknown";
+  message: string;
+  language: TranslationLanguage;
+}
+
 export interface TranslationResult {
   translatedText: string;
   provider: "demo" | "local-api";
@@ -134,6 +142,7 @@ export type BackgroundMessage =
   | { type: "get-account-usage" }
   | { type: "create-billing-checkout" }
   | { type: "create-billing-portal" }
+  | { type: "submit-enterprise-inquiry"; payload: EnterpriseInquiry }
   | { type: "get-auth-state" }
   | { type: "sign-in" }
   | { type: "sign-out" };

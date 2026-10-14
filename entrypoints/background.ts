@@ -21,7 +21,8 @@ import {
 import { isAuthConfigured } from "../src/auth/config";
 import {
   createBillingRedirect,
-  getAccountUsage
+  getAccountUsage,
+  sendEnterpriseInquiry
 } from "../src/translation/local-api-provider";
 
 export default defineBackground(() => {
@@ -82,6 +83,16 @@ export default defineBackground(() => {
               idToken,
               message.type === "create-billing-checkout" ? "checkout" : "portal"
             )
+          };
+        }
+
+        if (message.type === "submit-enterprise-inquiry") {
+          const settings = await getSettings();
+          const idToken = await getFirebaseIdToken();
+          if (!idToken) throw new Error("로그인 후 문의할 수 있습니다.");
+          return {
+            ok: true,
+            data: await sendEnterpriseInquiry(settings.localApiBaseUrl, idToken, message.payload)
           };
         }
 

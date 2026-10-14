@@ -31,7 +31,7 @@ export default defineConfig({
         ? "Zalo Language Bridge (Sandbox)"
         : "Zalo Language Bridge",
       description: "Write and understand Zalo Web messages naturally across Korean, English, and Vietnamese.",
-      version: "0.12.1",
+      version: "0.12.2",
       ...(extensionKey ? { key: extensionKey } : {}),
       permissions: ["storage", "identity"],
       ...(oauthClientId
@@ -55,7 +55,13 @@ export default defineConfig({
       action: {
         default_title: "Zalo Language Bridge Settings",
         default_icon: icons
-      }
+      },
+      web_accessible_resources: [
+        {
+          resources: ["font/PretendardVariable.woff2"],
+          matches: ["https://chat.zalo.me/*"]
+        }
+      ]
     };
   }
 });
