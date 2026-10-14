@@ -46,20 +46,27 @@ function customerUid(subscription) {
   return typeof externalId === "string" ? externalId.trim() : "";
 }
 
-export function subscriptionAccountUpdate(subscription, productId) {
+export function subscriptionAccountUpdate(subscription, productId, now = new Date()) {
   if (!subscription || subscription.product_id !== productId) return null;
   const uid = customerUid(subscription);
   if (!uid) {
     throw new BillingError("구독에서 Firebase 사용자를 확인할 수 없습니다.", 400, "missing_customer_uid");
   }
-  const active = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status);
+  const periodEnd = subscription.current_period_end || null;
+  const paidThroughPeriodEnd =
+    subscription.status === "canceled" &&
+    Boolean(subscription.cancel_at_period_end) &&
+    typeof periodEnd === "string" &&
+    Number.isFinite(Date.parse(periodEnd)) &&
+    Date.parse(periodEnd) > now.getTime();
+  const active = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) || paidThroughPeriodEnd;
   return {
     uid,
     plan: active ? "pro" : "free",
     subscriptionStatus: subscription.status,
     polarCustomerId: subscription.customer_id,
     polarSubscriptionId: subscription.id,
-    currentPeriodEnd: subscription.current_period_end || null,
+    currentPeriodEnd: periodEnd,
     cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end)
   };
 }

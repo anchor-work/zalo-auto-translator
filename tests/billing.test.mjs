@@ -62,6 +62,20 @@ describe("Polar billing", () => {
     expect(subscriptionAccountUpdate(subscription(), "another_product")).toBeNull();
   });
 
+  it("keeps Pro access through the paid period after cancellation", () => {
+    const canceled = subscription({
+      status: "canceled",
+      cancel_at_period_end: true,
+      current_period_end: "2026-11-14T00:00:00Z"
+    });
+    expect(
+      subscriptionAccountUpdate(canceled, "prod_pro", new Date("2026-10-14T00:00:00Z"))
+    ).toMatchObject({ plan: "pro", subscriptionStatus: "canceled", cancelAtPeriodEnd: true });
+    expect(
+      subscriptionAccountUpdate(canceled, "prod_pro", new Date("2026-11-15T00:00:00Z"))
+    ).toMatchObject({ plan: "free" });
+  });
+
   it("rejects a subscription that cannot be tied to a Firebase user", () => {
     expect(() => subscriptionAccountUpdate(subscription({ metadata: {}, customer: {} }), "prod_pro"))
       .toThrowError(BillingError);
