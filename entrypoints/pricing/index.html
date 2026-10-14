@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zalo Language Bridge 요금제</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top"><span aria-hidden="true">文A</span> Zalo Language Bridge</a>
+      <span id="account-email" class="account-email"></span>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <p class="eyebrow">FREE · PRO · ENTERPRISE</p>
+        <h1 id="hero-title"></h1>
+        <p id="hero-description" class="hero-description"></p>
+        <div class="trust-row" aria-label="Service assurances">
+          <span id="trust-storage"></span><span id="trust-zalo"></span><span id="trust-cancel"></span>
+        </div>
+        <p id="usage-message" class="usage-message" hidden></p>
+      </section>
+
+      <section class="plans" aria-label="Plans">
+        <article class="plan-card free-card">
+          <div class="plan-heading"><p id="free-kicker" class="plan-kicker"></p><h2>Free</h2></div>
+          <div class="price"><strong id="free-price"></strong></div>
+          <p id="free-description" class="plan-description"></p>
+          <ul id="free-features"></ul>
+          <button id="continue-free" class="button secondary" type="button"></button>
+          <p id="free-note" class="card-note"></p>
+        </article>
+
+        <article class="plan-card pro-card">
+          <span id="pro-badge" class="recommendation"></span>
+          <div class="plan-heading"><p id="pro-kicker" class="plan-kicker"></p><h2>Pro</h2></div>
+          <div class="price"><strong>$4.99</strong><span id="per-month"></span></div>
+          <p id="pro-renewal" class="renewal"></p>
+          <p id="pro-description" class="plan-description"></p>
+          <ul id="pro-features"></ul>
+          <button id="start-pro" class="button primary" type="button"></button>
+          <button id="manage-pro" class="button secondary" type="button" hidden></button>
+          <p id="pro-note" class="card-note"></p>
+        </article>
+
+        <article class="plan-card enterprise-card">
+          <div class="plan-heading"><p id="enterprise-kicker" class="plan-kicker"></p><h2>Enterprise</h2></div>
+          <div class="price"><strong id="enterprise-price"></strong></div>
+          <p id="enterprise-description" class="plan-description"></p>
+          <ul id="enterprise-features"></ul>
+          <a id="enterprise-contact" class="button enterprise" href="mailto:architect@anchors.work?subject=Zalo%20Language%20Bridge%20Enterprise"></a>
+          <p id="enterprise-note" class="card-note"></p>
+        </article>
+      </section>
+
+      <section class="privacy-card">
+        <div class="privacy-icon" aria-hidden="true">✓</div>
+        <div><h2 id="privacy-title"></h2><p id="privacy-copy"></p>
+          <a id="privacy-link" href="https://anchor-work.github.io/zalo-auto-translator/privacy/" target="_blank" rel="noreferrer"></a>
+        </div>
+      </section>
+
+      <section class="comparison">
+        <h2 id="comparison-title"></h2>
+        <div class="table-wrap"><table><thead><tr><th id="feature-heading"></th><th>Free</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody id="comparison-body"></tbody></table></div>
+      </section>
+
+      <section class="faq">
+        <h2 id="faq-title"></h2>
+        <div id="faq-list"></div>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -307,7 +307,7 @@ async function openBilling(message: "create-billing-checkout" | "create-billing-
 
 upgradeLink.addEventListener("click", (event) => {
   event.preventDefault();
-  void openBilling("create-billing-checkout");
+  void browser.tabs.create({ url: browser.runtime.getURL("/pricing.html") }).then(() => window.close());
 });
 manageBilling.addEventListener("click", () => {
   void openBilling("create-billing-portal");
