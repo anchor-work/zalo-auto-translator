@@ -12,6 +12,43 @@ describe("incoming Zalo message adapter", () => {
   beforeEach(() => {
     document.body.replaceChildren();
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
+    const composer = document.createElement("div");
+    composer.id = "test-chat-composer";
+    composer.contentEditable = "true";
+    document.body.append(composer);
+    vi.spyOn(composer, "getBoundingClientRect").mockReturnValue({
+      x: 20, y: 700, left: 20, top: 700, right: 1180, bottom: 750,
+      width: 1160, height: 50, toJSON: () => ({})
+    });
+  });
+
+  it("does not add translation controls to the conversation list or welcome screen", () => {
+    document.getElementById("test-chat-composer")?.remove();
+
+    const conversationList = document.createElement("section");
+    const preview = document.createElement("div");
+    preview.className = "message-row incoming";
+    preview.textContent = "Bạn: i will wait for you";
+    conversationList.append(preview);
+
+    const welcome = document.createElement("main");
+    const feature = document.createElement("div");
+    feature.style.backgroundColor = "white";
+    feature.style.borderRadius = "12px";
+    feature.textContent = "Gửi File nặng?";
+    welcome.append(feature);
+    document.body.append(conversationList, welcome);
+
+    vi.spyOn(preview, "getBoundingClientRect").mockReturnValue({
+      x: 120, y: 120, left: 120, top: 120, right: 540, bottom: 170,
+      width: 420, height: 50, toJSON: () => ({})
+    });
+    vi.spyOn(feature, "getBoundingClientRect").mockReturnValue({
+      x: 700, y: 400, left: 700, top: 400, right: 980, bottom: 460,
+      width: 280, height: 60, toJSON: () => ({})
+    });
+
+    expect(findIncomingMessages()).toEqual([]);
   });
 
   it("returns incoming messages and excludes outgoing messages", () => {

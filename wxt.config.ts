@@ -31,7 +31,7 @@ export default defineConfig({
         ? "Zalo Language Bridge (Sandbox)"
         : "Zalo Language Bridge",
       description: "Write and understand Zalo Web messages naturally across Korean, English, and Vietnamese.",
-      version: "0.12.3",
+      version: "0.12.4",
       ...(extensionKey ? { key: extensionKey } : {}),
       permissions: ["storage", "identity"],
       ...(oauthClientId

@@ -242,15 +242,13 @@ function visibleComposerBounds(): ConversationBounds | null {
   };
 }
 
-function conversationBounds(): ConversationBounds {
-  return (
-    visibleComposerBounds() ?? {
-      left: 0,
-      right: window.innerWidth,
-      top: 80,
-      bottom: window.innerHeight * 0.9
-    }
-  );
+function fallbackConversationBounds(): ConversationBounds {
+  return {
+    left: 0,
+    right: window.innerWidth,
+    top: 80,
+    bottom: window.innerHeight * 0.9
+  };
 }
 
 function isIncoming(
@@ -572,8 +570,15 @@ function structuredIncomingMessages(
 
 export function findIncomingMessages(root: ParentNode = document): IncomingMessageCandidate[] {
   const groups = new Map<HTMLElement, MessageGroup>();
-  const bounds = conversationBounds();
+  const composerBounds = visibleComposerBounds();
+  const bounds = composerBounds ?? fallbackConversationBounds();
   const structuredResults = structuredIncomingMessages(root, bounds);
+
+  // Zalo's conversation list and welcome screen contain plenty of text that
+  // resembles message bubbles. Only use the broad visual fallback when an
+  // actual chat composer is visible. Exact ReceivedMsg_Text frames remain
+  // eligible because they identify real received messages independently.
+  if (!composerBounds && structuredResults.length === 0) return [];
 
   for (const textElement of candidateElements(root)) {
     if (
